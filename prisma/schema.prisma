@@ -1,0 +1,435 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id            String    @id @default(cuid())
+  name          String
+  code          String    @unique
+  address       String?
+  city          String?
+  state         String?
+  gst           String?
+  pan           String?
+  contactPerson String?
+  contactNumber String?
+  email         String?
+  logoUrl       String?
+  status        String    @default("active")
+  projects      Project[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Project {
+  id                 String           @id @default(cuid())
+  companyId          String
+  company            Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name               String
+  code               String
+  location           String?
+  address            String?
+  reraNumber         String?
+  reraDate           DateTime?
+  projectType        String?
+  totalWings         Int              @default(0)
+  totalFloors        Int              @default(0)
+  unitsPerFloor      Int              @default(0)
+  totalUnits         Int              @default(0)
+  status             String           @default("active")
+  expectedCompletion DateTime?
+  launchDate         DateTime?
+  photoUrl           String?
+  numberFormat       String           @default("[Wing]-[Floor][Unit:2]")
+  wings              Wing[]
+  users              ProjectAccess[]
+  commissionRules    CommissionRule[]
+  bookings           Booking[]
+  documents          Document[]
+  leads              Lead[]
+  campaigns          Campaign[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([companyId, code])
+}
+
+model Wing {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int     @default(0)
+  floors    Floor[]
+  access    ProjectAccess[]
+}
+
+model Floor {
+  id     String @id @default(cuid())
+  wingId String
+  wing   Wing   @relation(fields: [wingId], references: [id], onDelete: Cascade)
+  number Int
+  units  Unit[]
+
+  @@unique([wingId, number])
+}
+
+model Unit {
+  id            String    @id @default(cuid())
+  floorId       String
+  floor         Floor     @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  unitNumber    String
+  unitType      String?
+  configuration String?
+  carpetArea    Float?
+  builtUpArea   Float?
+  saleableArea  Float?
+  balconyArea   Float?
+  facing        String?
+  parking       String?
+  basePrice     Float?
+  plc           Float?
+  otherCharges  Float?
+  remarks       String?
+  photoUrl      String?
+  status        String    @default("available")
+  sortOrder     Int       @default(0)
+  bookings      Booking[]
+  access        ProjectAccess[]
+  documents     Document[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Employee {
+  id           String          @id @default(cuid())
+  name         String
+  email        String          @unique
+  phone        String?
+  passwordHash String
+  roleId       String
+  role         Role            @relation(fields: [roleId], references: [id])
+  status       String          @default("active")
+  access       ProjectAccess[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  isSystem    Boolean      @default(false)
+  permissions Permission[]
+  employees   Employee[]
+}
+
+model Permission {
+  id     String @id @default(cuid())
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  action String
+
+  @@unique([roleId, action])
+}
+
+model ProjectAccess {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wingId     String?
+  wing       Wing?    @relation(fields: [wingId], references: [id], onDelete: Cascade)
+  unitId     String?
+  unit       Unit?    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+}
+
+model Booking {
+  id               String              @id @default(cuid())
+  bookingNumber    String              @unique
+  bookingDate      DateTime
+  projectId        String
+  project          Project             @relation(fields: [projectId], references: [id])
+  unitId           String
+  unit             Unit                @relation(fields: [unitId], references: [id])
+  salesEmployeeId  String?
+  channelPartnerId String?
+  channelPartner   ChannelPartner?     @relation(fields: [channelPartnerId], references: [id])
+  status           String              @default("booked")
+  remarks          String?
+  customers        Customer[]
+  financials       BookingFinancial?
+  entitlement      PartnerEntitlement?
+  payments         Payment[]
+  documents        Document[]
+  schedules        PaymentSchedule[]
+  invoices         Invoice[]
+  reminders        Reminder[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+}
+
+model Customer {
+  id          String    @id @default(cuid())
+  bookingId   String
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  role        String
+  name        String
+  mobile      String
+  email       String?
+  pan         String?
+  aadhaar     String?
+  address     String?
+  dob         DateTime?
+  kycDocsUrl  String?
+  documents   Document[]
+}
+
+model BookingFinancial {
+  id                   String  @id @default(cuid())
+  bookingId            String  @unique
+  booking              Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  basicSaleValue       Float
+  agreementValue       Float
+  gst                  Float   @default(0)
+  stampDuty            Float   @default(0)
+  registration         Float   @default(0)
+  otherCharges         Float   @default(0)
+  discount             Float   @default(0)
+  totalCost            Float
+  finalAgreementValue  Float
+  cashComponent        Float   @default(0)
+  financedComponent    Float   @default(0)
+}
+
+model ChannelPartner {
+  id           String    @id @default(cuid())
+  name         String
+  phone        String?
+  email        String?
+  panGst       String?
+  firmName     String?
+  status       String    @default("active")
+  passwordHash String?
+  bookings     Booking[]
+  createdAt    DateTime  @default(now())
+}
+
+model CommissionRule {
+  id            String               @id @default(cuid())
+  projectId     String
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String?
+  type          String
+  value         Float?
+  slabConfig    String?
+  active        Boolean              @default(true)
+  entitlements  PartnerEntitlement[]
+  createdAt     DateTime             @default(now())
+}
+
+model PartnerEntitlement {
+  id                 String         @id @default(cuid())
+  bookingId          String         @unique
+  booking            Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  ruleId             String
+  rule               CommissionRule @relation(fields: [ruleId], references: [id])
+  entitlementPercent Float?
+  entitlementAmount  Float
+  received           Float          @default(0)
+  outstanding        Float
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  paymentDate DateTime
+  amount      Float
+  paymentMode String
+  utrOrCheque String?
+  bank        String?
+  proofUrl    String?
+  remarks     String?
+  addedBy     String?
+  verifiedBy  String?
+  status      String   @default("pending")
+  appliesTo   String   @default("customer")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Document {
+  id         String    @id @default(cuid())
+  entityType String
+  entityId   String
+  projectId  String?
+  project    Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  bookingId  String?
+  booking    Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  unitId     String?
+  unit       Unit?     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  category   String
+  name       String
+  fileUrl    String
+  mimeType   String?
+  sizeBytes  Int?
+  uploadedBy String?
+  createdAt  DateTime  @default(now())
+}
+
+model PaymentSchedule {
+  id          String   @id @default(cuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  name        String
+  dueDate     DateTime
+  amount      Float
+  received    Float    @default(0)
+  outstanding Float
+  status      String   @default("pending")
+  sortOrder   Int      @default(0)
+}
+
+model Reminder {
+  id         String    @id @default(cuid())
+  projectId  String?
+  bookingId  String?
+  booking    Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type       String
+  channel    String    @default("in_app")
+  title      String
+  message    String
+  dueAt      DateTime
+  status     String    @default("scheduled")
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  employeeId String?
+  partnerId  String?
+  title      String
+  body       String
+  type       String
+  readAt     DateTime?
+  linkUrl    String?
+  createdAt  DateTime  @default(now())
+}
+
+model Invoice {
+  id         String   @id @default(cuid())
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  number     String   @unique
+  kind       String
+  amount     Float
+  tax        Float    @default(0)
+  status     String   @default("issued")
+  issuedAt   DateTime @default(now())
+  paymentId  String?
+  notes      String?
+}
+
+model Approval {
+  id          String    @id @default(cuid())
+  type        String
+  entityType  String
+  entityId    String
+  projectId   String?
+  requestedBy String
+  assignedTo  String?
+  status      String    @default("pending")
+  reason      String?
+  decidedBy   String?
+  decidedAt   DateTime?
+  payload     String?
+  createdAt   DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorName  String?
+  action     String
+  entityType String
+  entityId   String
+  projectId  String?
+  meta       String?
+  createdAt  DateTime @default(now())
+}
+
+model Integration {
+  id         String    @id @default(cuid())
+  provider   String    @unique
+  name       String
+  enabled    Boolean   @default(false)
+  config     String    @default("{}")
+  lastTestAt DateTime?
+  lastTestOk Boolean?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model MessageLog {
+  id        String   @id @default(cuid())
+  provider  String
+  toAddress String
+  subject   String?
+  body      String
+  status    String
+  error     String?
+  createdAt DateTime @default(now())
+}
+
+model Campaign {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  name      String
+  channel   String
+  status    String   @default("draft")
+  audience  String
+  message   String
+  sentCount Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Lead {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  name      String
+  phone     String?
+  email     String?
+  source    String?
+  status    String   @default("new")
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+model MasterOption {
+  id        String  @id @default(cuid())
+  group     String
+  label     String
+  value     String
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  @@unique([group, value])
+}
+
+model AppSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}

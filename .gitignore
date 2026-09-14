@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+*.db
+*.db-journal
+/prisma/dev.db
+/uploads
+.DS_Store
+*.log
+.vite
+.tsbuildinfo

@@ -1,0 +1,43 @@
+export const qk = {
+  me: ["me"] as const,
+  companies: ["companies"] as const,
+  company: (id: string) => ["companies", id] as const,
+  projects: (companyId?: string) =>
+    companyId ? (["projects", companyId] as const) : (["projects"] as const),
+  project: (id: string) => ["project", id] as const,
+  inventory: (projectId: string, filters?: unknown) =>
+    ["inventory", projectId, filters] as const,
+  units: (projectId: string, filters?: unknown) =>
+    ["units", projectId, filters] as const,
+  unit: (id: string) => ["unit", id] as const,
+  bookings: (filters?: unknown) => ["bookings", filters] as const,
+  booking: (id: string) => ["booking", id] as const,
+  partners: ["channel-partners"] as const,
+  partner: (id: string) => ["channel-partners", id] as const,
+  partnerDashboard: (id: string) => ["partner-dashboard", id] as const,
+  payments: (bookingId: string) => ["payments", bookingId] as const,
+  paymentsList: (filters?: unknown) => ["payments-list", filters] as const,
+  dashboardAdmin: ["dashboard", "admin"] as const,
+  dashboardProject: (id: string) => ["dashboard", "project", id] as const,
+  employees: ["employees"] as const,
+  roles: ["roles"] as const,
+  access: (employeeId: string) => ["access", employeeId] as const,
+  commissionRules: (projectId: string) =>
+    ["commission-rules", projectId] as const,
+  customers: (filters?: unknown) => ["customers", filters] as const,
+  reports: (kind: string, filters?: unknown) =>
+    ["reports", kind, filters] as const,
+  documents: (filters?: unknown) => ["documents", filters] as const,
+  reminders: (filters?: unknown) => ["reminders", filters] as const,
+  notifications: ["notifications"] as const,
+  audit: (filters?: unknown) => ["audit", filters] as const,
+  approvals: (filters?: unknown) => ["approvals", filters] as const,
+  settings: ["settings"] as const,
+  masters: (group?: string) => ["masters", group] as const,
+  search: (q: string) => ["search", q] as const,
+  integrations: ["integrations"] as const,
+  leads: (filters?: unknown) => ["leads", filters] as const,
+  campaigns: (filters?: unknown) => ["campaigns", filters] as const,
+  invoice: (id: string) => ["invoice", id] as const,
+  partnerPortal: ["partner-portal"] as const,
+};

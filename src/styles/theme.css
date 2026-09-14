@@ -1,0 +1,196 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: Inter, system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-brand: var(--brand);
+  --color-info: var(--info);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-status-available: var(--status-available);
+  --color-status-sold: var(--status-sold);
+  --color-status-booked: var(--status-booked);
+  --color-status-hold: var(--status-hold);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-unavailable: var(--status-unavailable);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.25rem;
+
+  --shadow-soft: var(--shadow-soft-value);
+  --shadow-elevated: var(--shadow-elevated-value);
+  --shadow-brand-glow: var(--shadow-brand-glow-value);
+}
+
+:root {
+  --background: #f4f7fb;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --primary: #009bff;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f3fc;
+  --secondary-foreground: #0b5f94;
+  --muted: #eef2f7;
+  --muted-foreground: #5b6b7c;
+  --accent: #e8f3fc;
+  --accent-foreground: #0b5f94;
+  --success: #159947;
+  --warning: #d97706;
+  --warning-foreground: #78350f;
+  --destructive: #e11d48;
+  --border: #dbe3ec;
+  --input: #d0dae6;
+  --ring: #009bff;
+  --sidebar: #0b1f33;
+  --sidebar-foreground: #e8f4fc;
+  --sidebar-primary: #009bff;
+  --sidebar-accent: #12324d;
+  --sidebar-border: #1a334d;
+  --brand: #009bff;
+  --info: #009bff;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --chart-1: #009bff;
+  --chart-2: #0077c2;
+  --chart-3: #159947;
+  --chart-4: #d97706;
+  --chart-5: #e11d48;
+  --status-available: #159947;
+  --status-sold: #e11d48;
+  --status-booked: #0077c2;
+  --status-hold: #d97706;
+  --status-blocked: #009bff;
+  --status-unavailable: #94a3b8;
+  --shadow-soft-value: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 14px rgb(0 120 200 / 0.07);
+  --shadow-elevated-value: 0 10px 28px rgb(15 23 42 / 0.1);
+  --shadow-brand-glow-value: 0 8px 24px rgb(0 155 255 / 0.25);
+  --theme-ease: cubic-bezier(0.33, 0, 0.2, 1);
+  --theme-duration: 700ms;
+}
+
+.dark {
+  --background: #060e18;
+  --foreground: #e8eef6;
+  --card: #0c1826;
+  --card-foreground: #e8eef6;
+  --primary: #2eb0ff;
+  --primary-foreground: #041018;
+  --secondary: #122030;
+  --secondary-foreground: #c5d8ea;
+  --muted: #122030;
+  --muted-foreground: #8fa3b8;
+  --accent: #122030;
+  --accent-foreground: #c5d8ea;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --warning-foreground: #78350f;
+  --destructive: #fb7185;
+  --border: rgb(148 163 184 / 16%);
+  --input: rgb(148 163 184 / 22%);
+  --ring: #2eb0ff;
+  --sidebar: #040a12;
+  --sidebar-foreground: #e8f4fc;
+  --sidebar-primary: #2eb0ff;
+  --sidebar-accent: #0f2236;
+  --sidebar-border: #1a334d;
+  --brand: #2eb0ff;
+  --info: #2eb0ff;
+  --popover: #0c1826;
+  --popover-foreground: #e8eef6;
+  --chart-1: #2eb0ff;
+  --chart-2: #0077c2;
+  --chart-3: #34d399;
+  --chart-4: #fbbf24;
+  --chart-5: #fb7185;
+  --status-available: #34d399;
+  --status-sold: #fb7185;
+  --status-booked: #2eb0ff;
+  --status-hold: #fbbf24;
+  --status-blocked: #2eb0ff;
+  --status-unavailable: #64748b;
+  --shadow-soft-value: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 20px rgb(0 80 140 / 0.18);
+  --shadow-elevated-value: 0 12px 32px rgb(0 0 0 / 0.45);
+  --shadow-brand-glow-value: 0 8px 24px rgb(46 176 255 / 0.28);
+}
+
+@utility card-soft {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+}
+
+html {
+  color-scheme: light;
+  background: var(--background);
+  color: var(--foreground);
+  transition:
+    background-color var(--theme-duration) var(--theme-ease),
+    color var(--theme-duration) var(--theme-ease),
+    border-color var(--theme-duration) var(--theme-ease),
+    box-shadow var(--theme-duration) var(--theme-ease);
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body,
+aside,
+header,
+main,
+.card-soft,
+[data-slot] {
+  transition:
+    background-color var(--theme-duration) var(--theme-ease),
+    color var(--theme-duration) var(--theme-ease),
+    border-color var(--theme-duration) var(--theme-ease),
+    box-shadow var(--theme-duration) var(--theme-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body,
+  aside,
+  header,
+  main,
+  .card-soft,
+  [data-slot] {
+    transition: none !important;
+  }
+}
