@@ -1,42 +1,46 @@
-# UnitDesk production notes
+# UnitDesk — GitHub Actions deploy
 
-## Domain
-- https://unitdesk.cravingcodetech.in
-- Server: 69.62.84.237
+## Live
+- URL: https://unitdesk.cravingcodetech.in
+- Server: `69.62.84.237`
+- Path: `/home/unitdesk/htdocs/unitdesk.cravingcodetech.in`
+- Port: `3101` (must match CloudPanel App Port + `.env` `PORT`)
+- PM2 name: `unitdesk` (currently under **root**)
 
-## CloudPanel site
-1. Sites → **+ ADD SITE**
-2. Domain: `unitdesk.cravingcodetech.in`
-3. App type: **NODEJS**
-4. Note the created **Site User** (e.g. `unitdesk`)
-5. Point the Node app to this project folder and start with `npm start`
-6. App port must match `.env` `PORT` (default `3001`) and CloudPanel’s Node port setting
-
-## Server bootstrap (one-time, as site user)
-```bash
-cd /home/<SITE_USER>/htdocs/unitdesk.cravingcodetech.in
-# or whatever path CloudPanel shows for the site
-git clone https://github.com/Vipin2507/Buildesk-UnitDesk.git .
-cp .env.example .env
-nano .env   # set JWT_SECRET + DATABASE_URL + PORT
-npm ci
-npx prisma generate
-npx prisma db push
-npm run db:seed
-npm run build
-pm2 start npm --name unitdesk -- start
-pm2 save
-```
-
-## GitHub Actions secrets
+## GitHub secrets
 Repo → Settings → Secrets and variables → Actions:
 
-| Secret | Example |
+| Secret | Value |
 | --- | --- |
 | `SSH_HOST` | `69.62.84.237` |
-| `SSH_USER` | CloudPanel site user |
-| `SSH_PRIVATE_KEY` | Private key for that user (full PEM) |
-| `SSH_PORT` | `22` (optional) |
-| `DEPLOY_PATH` | `/home/<SITE_USER>/htdocs/unitdesk.cravingcodetech.in` |
+| `SSH_USER` | `root` |
+| `SSH_PRIVATE_KEY` | Full private key PEM used for root SSH |
+| `SSH_PORT` | `22` |
+| `DEPLOY_PATH` | `/home/unitdesk/htdocs/unitdesk.cravingcodetech.in` |
 
-Deploy runs on every push to `main`.
+> Use `root` because PM2 was started as root. Later you can move the process to user `unitdesk` and switch `SSH_USER`.
+
+## One-time SSH key (on your Mac)
+```bash
+ssh-keygen -t ed25519 -C "github-unitdesk-deploy" -f ~/.ssh/unitdesk_deploy -N ""
+ssh-copy-id -i ~/.ssh/unitdesk_deploy.pub root@69.62.84.237
+# test
+ssh -i ~/.ssh/unitdesk_deploy root@69.62.84.237 'pm2 describe unitdesk | head'
+```
+
+Add **private** key to GitHub secret `SSH_PRIVATE_KEY`:
+```bash
+pbcopy < ~/.ssh/unitdesk_deploy
+```
+
+## Trigger deploy
+- Push to `main`, or
+- Actions → **Deploy UnitDesk** → **Run workflow**
+
+## Server `.env` (already created; do not overwrite via Actions)
+```env
+DATABASE_URL="file:./prod.db"
+JWT_SECRET="..."
+PORT=3101
+NODE_ENV=production
+```

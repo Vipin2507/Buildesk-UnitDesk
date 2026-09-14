@@ -47,13 +47,13 @@ export function ProjectSetupPage() {
 
   const generate = useMutation({
     mutationFn: () =>
-      api.post(`/api/projects/${id}/generate-units`, {
+      api.post<{ preview: number }>(`/api/projects/${id}/generate-units`, {
         wings,
         floorsPerWing: floors,
         unitsPerFloor,
         numberFormat,
       }),
-    onSuccess: (res: { preview: number }) => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: qk.project(id!) });
       qc.invalidateQueries({ queryKey: ["inventory", id] });
       toast.success(`Generated ${res.preview} units`);

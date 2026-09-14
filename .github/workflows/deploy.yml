@@ -17,20 +17,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Upload app to server
+      - name: Sync files to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: ".,!.git,!node_modules,!dist,!.env,!uploads,!prisma/*.db,!prisma/*.db-journal"
+          source: ".,!.git,!node_modules,!dist,!.env,!uploads,!prisma/*.db,!prisma/*.db-journal,.env.example"
           target: ${{ secrets.DEPLOY_PATH }}
-          rm: false
-          strip_components: 0
           overwrite: true
+          strip_components: 0
 
-      - name: Install, build, restart
+      - name: Install, build, restart PM2
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -44,8 +43,7 @@ jobs:
             cd "$APP_DIR"
 
             if [ ! -f .env ]; then
-              echo "Missing .env in $APP_DIR"
-              echo "Create it once on the server from .env.example before deploying."
+              echo "Missing .env in $APP_DIR — create it on the server first."
               exit 1
             fi
 
@@ -56,17 +54,15 @@ jobs:
             npm run build
 
             export NODE_ENV=production
-            if command -v pm2 >/dev/null 2>&1; then
-              if pm2 describe unitdesk >/dev/null 2>&1; then
-                pm2 restart unitdesk --update-env
-              else
-                pm2 start npm --name unitdesk --cwd "$APP_DIR" -- start
-                pm2 save
-              fi
+            if pm2 describe unitdesk >/dev/null 2>&1; then
+              pm2 restart unitdesk --update-env
             else
-              echo "PM2 missing — restart the Node app from CloudPanel UI."
+              pm2 start npm --name unitdesk --cwd "$APP_DIR" -- start
+              pm2 save
             fi
 
             sleep 2
-            curl -sf http://127.0.0.1:3001/api/health || true
+            APP_PORT="$(grep -E '^PORT=' .env | cut -d= -f2 | tr -d '\"' || true)"
+            curl -sf "http://127.0.0.1:${APP_PORT:-3101}/api/health"
+            echo
             echo "Deploy OK"
