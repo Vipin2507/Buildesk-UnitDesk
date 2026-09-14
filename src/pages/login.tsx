@@ -12,8 +12,8 @@ import { useAuthStore, type AuthUser } from "@/stores/auth";
 export function LoginPage() {
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
-  const [email, setEmail] = useState("vipin@cravingcode.in");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent) {
@@ -82,9 +82,6 @@ export function LoginPage() {
             </Button>
           </form>
           <p className="mt-4 text-[11px] text-muted-foreground">
-            Demo: vipin@cravingcode.in / Admin@123
-          </p>
-          <p className="mt-2 text-[11px] text-muted-foreground">
             Channel partner?{" "}
             <a href="/partner/login" className="text-primary hover:underline">
               Partner portal
