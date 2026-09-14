@@ -6,6 +6,7 @@ import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/shared/field";
+import { PasswordInput } from "@/components/shared/password-input";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore, type AuthUser } from "@/stores/auth";
 
@@ -75,7 +76,12 @@ export function LoginPage() {
               <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="h-10" />
             </Field>
             <Field label="Password">
-              <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="h-10" />
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-10"
+                autoComplete="current-password"
+              />
             </Field>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in…" : "Continue"}

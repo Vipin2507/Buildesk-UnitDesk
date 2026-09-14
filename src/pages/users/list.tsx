@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Field } from "@/components/shared/field";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageWrap } from "@/components/shared/page-wrap";
+import { PasswordInput } from "@/components/shared/password-input";
 import { SegmentedTabs } from "@/components/shared/segmented-tabs";
 import { StatusPill } from "@/components/shared/status-pill";
 import { Button } from "@/components/ui/button";
@@ -406,7 +407,12 @@ export function UsersPage() {
               <Input className="h-8" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </Field>
             <Field label={editingUser ? "New password (optional)" : "Password"}>
-              <Input className="h-8" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <PasswordInput
+                className="h-8"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                autoComplete={editingUser ? "new-password" : "new-password"}
+              />
             </Field>
             <Field label="Role">
               <Select value={form.roleId} onValueChange={(v) => setForm({ ...form, roleId: v })}>
