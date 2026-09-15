@@ -22,7 +22,7 @@ import { cn } from "@/lib/cn";
 import { floorLabel, formatDate, inr } from "@/lib/format";
 import { qk } from "@/lib/query-keys";
 import { statusLabel } from "@/lib/status";
-import { isCustomUnitPhoto, resolveUnitPhotoUrl } from "@/lib/unit-plans";
+import { isCustomUnitPhoto, projectPlansFrom, resolveUnitPhotoUrl } from "@/lib/unit-plans";
 import { useDrilldownSheetStore } from "@/stores/drilldown";
 
 type UnitTab = "overview" | "customer" | "financials" | "documents" | "activity";
@@ -46,7 +46,18 @@ type UnitDetail = {
   status: string;
   floor: {
     number: number;
-    wing: { id: string; name: string; projectId?: string; project: { id: string; name: string } };
+    wing: {
+      id: string;
+      name: string;
+      projectId?: string;
+      project: {
+        id: string;
+        name: string;
+        plan1bhkUrl?: string | null;
+        plan2bhkUrl?: string | null;
+        plan3bhkUrl?: string | null;
+      };
+    };
   };
   bookings: Array<{
     id: string;
@@ -147,8 +158,9 @@ export function UnitDetailPanel({
   }
 
   const shown = unitId ? data : undefined;
+  const projectPlans = projectPlansFrom(shown?.floor.wing.project);
   const planUrl = shown
-    ? resolveUnitPhotoUrl(shown.photoUrl, shown.unitType, shown.configuration)
+    ? resolveUnitPhotoUrl(shown.photoUrl, shown.unitType, shown.configuration, projectPlans)
     : null;
   const customPhoto = isCustomUnitPhoto(shown?.photoUrl);
 

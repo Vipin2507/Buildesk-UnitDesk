@@ -12,6 +12,7 @@ import { api, ApiError } from "@/lib/api";
 import { formatDate, inr } from "@/lib/format";
 import { DEFAULT_PROJECT_PHOTO } from "@/lib/project-photo";
 import { qk } from "@/lib/query-keys";
+import { systemUnitPlanUrl } from "@/lib/unit-plans";
 import { useProjectContextStore } from "@/stores/project-context";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -26,6 +27,9 @@ type Project = {
   launchDate: string | null;
   expectedCompletion: string | null;
   photoUrl: string | null;
+  plan1bhkUrl: string | null;
+  plan2bhkUrl: string | null;
+  plan3bhkUrl: string | null;
   company: { id: string; name: string };
 };
 
@@ -91,7 +95,7 @@ export function ProjectOverviewPage() {
         }
       />
       {project ? <StatusPill status={project.status} /> : null}
-      <div className="max-w-xl">
+      <div className="max-w-xl space-y-3">
         <ImageUpload
           label="Project photo"
           variant="cover"
@@ -99,6 +103,46 @@ export function ProjectOverviewPage() {
           fallback={DEFAULT_PROJECT_PHOTO}
           onChange={(url) => setPhoto.mutate(url)}
         />
+        {project ? (
+          <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+            <div>
+              <p className="text-xs font-semibold">Floor plans by type (optional)</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Custom plans override system defaults for this project only.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(
+                [
+                  ["plan1bhkUrl", "1 BHK", "1bhk"],
+                  ["plan2bhkUrl", "2 BHK", "2bhk"],
+                  ["plan3bhkUrl", "3 BHK", "3bhk"],
+                ] as const
+              ).map(([key, label, sys]) => (
+                <ImageUpload
+                  key={key}
+                  label={label}
+                  variant="plan"
+                  compact
+                  hint=""
+                  value={project[key]}
+                  fallback={systemUnitPlanUrl(sys)}
+                  onChange={(url) =>
+                    api
+                      .patch(`/api/projects/${id}`, { [key]: url })
+                      .then(() => {
+                        qc.invalidateQueries({ queryKey: qk.project(id!) });
+                        toast.success(`${label} plan updated`);
+                      })
+                      .catch((err) =>
+                        toast.error(err instanceof ApiError ? err.message : "Could not update plan"),
+                      )
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <KpiCard label="Units" value={dash?.kpis.units ?? 0} icon={LayoutGrid} onClick={() => navigate(`/projects/${id}/inventory`)} />

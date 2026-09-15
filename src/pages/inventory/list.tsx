@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { api, ApiError, type ListResponse } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
-import { resolveUnitPhotoUrl } from "@/lib/unit-plans";
+import { resolveUnitPhotoUrl, projectPlansFrom } from "@/lib/unit-plans";
 import { useDrilldownSheetStore } from "@/stores/drilldown";
 import { useInventoryFilterStore } from "@/stores/inventory-filters";
 import { LayoutGrid } from "lucide-react";
@@ -44,6 +44,17 @@ export function UnitMasterPage() {
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState<UnitRow | null>(null);
 
+  const { data: project } = useQuery({
+    queryKey: qk.project(id!),
+    queryFn: () =>
+      api.get<{
+        plan1bhkUrl: string | null;
+        plan2bhkUrl: string | null;
+        plan3bhkUrl: string | null;
+      }>(`/api/projects/${id}`),
+    enabled: Boolean(id),
+  });
+
   const { data } = useQuery({
     queryKey: qk.units(id!, { search, status: filters.status, wing: filters.wing }),
     queryFn: () =>
@@ -55,6 +66,7 @@ export function UnitMasterPage() {
     enabled: Boolean(id),
   });
 
+  const plans = projectPlansFrom(project);
   const remove = useMutation({
     mutationFn: (unitId: string) => api.del(`/api/units/${unitId}`),
     onSuccess: () => {
@@ -136,7 +148,7 @@ export function UnitMasterPage() {
               <span className="flex items-center gap-2">
                 <span className="h-8 w-8 shrink-0 overflow-hidden rounded-md border bg-muted">
                   <img
-                    src={resolveUnitPhotoUrl(r.photoUrl, r.unitType, null)}
+                    src={resolveUnitPhotoUrl(r.photoUrl, r.unitType, null, plans)}
                     alt=""
                     className="h-full w-full object-cover"
                   />

@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
-import { isCustomUnitPhoto, resolveUnitPhotoUrl } from "@/lib/unit-plans";
+import { isCustomUnitPhoto, projectPlansFrom, resolveUnitPhotoUrl } from "@/lib/unit-plans";
 
 type Wing = {
   id: string;
@@ -25,6 +25,9 @@ type Project = {
   id: string;
   name: string;
   company: { id: string; name: string };
+  plan1bhkUrl?: string | null;
+  plan2bhkUrl?: string | null;
+  plan3bhkUrl?: string | null;
   wings: Wing[];
 };
 
@@ -213,7 +216,12 @@ export function UnitFormPage() {
           <div className="sm:col-span-2">
             <p className="mb-1.5 text-xs font-medium">Floor plan / unit photo</p>
             <UnitPlanImage
-              src={resolveUnitPhotoUrl(form.photoUrl, form.unitType, form.configuration)}
+              src={resolveUnitPhotoUrl(
+                form.photoUrl,
+                form.unitType,
+                form.configuration,
+                projectPlansFrom(project),
+              )}
               size="lg"
               className="max-w-sm"
               editable
@@ -221,7 +229,7 @@ export function UnitFormPage() {
               onChange={(url) => set("photoUrl", url)}
             />
             <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Defaults from unit type (1 / 2 / 3 BHK). Hover the image to replace or reset.
+              Defaults from project or system type plan (1 / 2 / 3 BHK). Hover to replace or reset.
             </p>
           </div>
           <Field label="Wing">

@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, ApiError, type ListResponse } from "@/lib/api";
 import { DEFAULT_PROJECT_PHOTO } from "@/lib/project-photo";
 import { qk } from "@/lib/query-keys";
+import { systemUnitPlanUrl } from "@/lib/unit-plans";
 import { useProjectContextStore } from "@/stores/project-context";
 
 type Form = {
@@ -31,6 +32,9 @@ type Form = {
   expectedCompletion: string;
   launchDate: string;
   photoUrl: string | null;
+  plan1bhkUrl: string | null;
+  plan2bhkUrl: string | null;
+  plan3bhkUrl: string | null;
 };
 
 const empty: Form = {
@@ -49,6 +53,9 @@ const empty: Form = {
   expectedCompletion: "",
   launchDate: "",
   photoUrl: null,
+  plan1bhkUrl: null,
+  plan2bhkUrl: null,
+  plan3bhkUrl: null,
 };
 
 export function ProjectFormPage() {
@@ -84,6 +91,9 @@ export function ProjectFormPage() {
       expectedCompletion: data.expectedCompletion ? String(data.expectedCompletion).slice(0, 10) : "",
       launchDate: data.launchDate ? String(data.launchDate).slice(0, 10) : "",
       photoUrl: data.photoUrl ?? null,
+      plan1bhkUrl: (data as Form).plan1bhkUrl ?? null,
+      plan2bhkUrl: (data as Form).plan2bhkUrl ?? null,
+      plan3bhkUrl: (data as Form).plan3bhkUrl ?? null,
     });
   }, [data]);
 
@@ -142,6 +152,43 @@ export function ProjectFormPage() {
               onChange={(url) => set("photoUrl", url)}
             />
           </div>
+          <div className="sm:col-span-2 space-y-2 rounded-lg border bg-muted/20 p-3">
+            <div>
+              <p className="text-xs font-semibold">Floor plans by type (optional)</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Leave blank to use system defaults for 1 / 2 / 3 BHK. Custom images apply to all units of that type in this project.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <ImageUpload
+                label="1 BHK plan"
+                variant="plan"
+                compact
+                hint=""
+                value={form.plan1bhkUrl}
+                fallback={systemUnitPlanUrl("1bhk")}
+                onChange={(url) => set("plan1bhkUrl", url)}
+              />
+              <ImageUpload
+                label="2 BHK plan"
+                variant="plan"
+                compact
+                hint=""
+                value={form.plan2bhkUrl}
+                fallback={systemUnitPlanUrl("2bhk")}
+                onChange={(url) => set("plan2bhkUrl", url)}
+              />
+              <ImageUpload
+                label="3 BHK plan"
+                variant="plan"
+                compact
+                hint=""
+                value={form.plan3bhkUrl}
+                fallback={systemUnitPlanUrl("3bhk")}
+                onChange={(url) => set("plan3bhkUrl", url)}
+              />
+            </div>
+          </div>
           {!companyId && !isEdit ? (
             <Field label="Company" className="sm:col-span-2">
               <Select value={form.companyId || undefined} onValueChange={(v) => set("companyId", v)}>
@@ -191,10 +238,10 @@ export function ProjectFormPage() {
           <Field label="Total wings">
             <Input className="h-8" type="number" value={form.totalWings} onChange={(e) => set("totalWings", Number(e.target.value))} />
           </Field>
-          <Field label="Total floors">
+          <Field label="Typical floors / wing">
             <Input className="h-8" type="number" value={form.totalFloors} onChange={(e) => set("totalFloors", Number(e.target.value))} />
           </Field>
-          <Field label="Units per floor">
+          <Field label="Typical units / floor">
             <Input className="h-8" type="number" value={form.unitsPerFloor} onChange={(e) => set("unitsPerFloor", Number(e.target.value))} />
           </Field>
           <Field label="Status">
@@ -209,8 +256,9 @@ export function ProjectFormPage() {
             </Select>
           </Field>
           <p className="sm:col-span-2 text-xs text-muted-foreground">
-            Live shape preview: {form.totalWings} × {form.totalFloors} × {form.unitsPerFloor} ={" "}
-            <span className="font-semibold tabular-nums text-foreground">{preview}</span> units
+            Estimate only ({form.totalWings} × {form.totalFloors} × {form.unitsPerFloor} ≈{" "}
+            <span className="font-semibold tabular-nums text-foreground">{preview}</span> units).
+            After save, configure different floors and units per wing in Project setup.
           </p>
           <div className="sm:col-span-2 flex justify-end gap-1.5">
             <Button type="button" variant="outline" size="sm" onClick={() => navigate(-1)}>Cancel</Button>

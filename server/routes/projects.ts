@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
 import { accessibleProjectIds, assertProjectAccess, requirePermission } from "../lib/access.ts";
-import { formatUnitNumber, previewCount } from "../lib/units.ts";
+import { defaultsForUnitType, formatUnitNumber } from "../lib/units.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
 
@@ -24,15 +24,29 @@ const projectSchema = z.object({
   expectedCompletion: z.string().optional().nullable(),
   launchDate: z.string().optional().nullable(),
   photoUrl: z.string().optional().nullable(),
+  plan1bhkUrl: z.string().optional().nullable(),
+  plan2bhkUrl: z.string().optional().nullable(),
+  plan3bhkUrl: z.string().optional().nullable(),
   numberFormat: z.string().optional(),
 });
 
 const generateSchema = z.object({
-  wings: z.array(z.string().min(1)).min(1),
-  floorsPerWing: z.number().int().min(1),
-  unitsPerFloor: z.number().int().min(1),
   numberFormat: z.string().default("[Wing]-[Floor][Unit:2]"),
-  defaultType: z.string().optional(),
+  wings: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        floors: z
+          .array(
+            z.object({
+              number: z.number().int(),
+              types: z.array(z.enum(["1BHK", "2BHK", "3BHK"])).min(1).max(40),
+            }),
+          )
+          .min(1),
+      }),
+    )
+    .min(1),
 });
 
 projectsRouter.get(
@@ -186,7 +200,17 @@ projectsRouter.post(
     const projectId = String(req.params.id);
     await assertProjectAccess(user, projectId);
     const body = req.body as z.infer<typeof generateSchema>;
-    const preview = previewCount(body.wings.length, body.floorsPerWing, body.unitsPerFloor);
+
+    const preview = body.wings.reduce(
+      (sum, wing) => sum + wing.floors.reduce((s, floor) => s + floor.types.length, 0),
+      0,
+    );
+    const maxFloors = Math.max(...body.wings.map((w) => w.floors.length));
+    const typicalUnits =
+      Math.round(
+        body.wings.reduce((s, w) => s + w.floors.reduce((a, f) => a + f.types.length, 0), 0) /
+          Math.max(1, body.wings.reduce((s, w) => s + w.floors.length, 0)),
+      ) || 1;
 
     const existingBookings = await prisma.booking.count({
       where: { projectId, status: { not: "cancelled" } },
@@ -198,30 +222,31 @@ projectsRouter.post(
     const created = await prisma.$transaction(async (tx) => {
       await tx.wing.deleteMany({ where: { projectId } });
       const wings = [];
-      for (const [wi, name] of body.wings.entries()) {
+      for (const [wi, wingCfg] of body.wings.entries()) {
         const wing = await tx.wing.create({
-          data: { projectId, name: name.trim(), sortOrder: wi },
+          data: { projectId, name: wingCfg.name.trim(), sortOrder: wi },
         });
-        for (let floorNo = 1; floorNo <= body.floorsPerWing; floorNo++) {
+        for (const floorCfg of wingCfg.floors) {
           const floor = await tx.floor.create({
-            data: { wingId: wing.id, number: floorNo },
+            data: { wingId: wing.id, number: floorCfg.number },
           });
-          for (let u = 1; u <= body.unitsPerFloor; u++) {
+          for (let u = 0; u < floorCfg.types.length; u++) {
+            const typed = defaultsForUnitType(floorCfg.types[u]!);
             await tx.unit.create({
               data: {
                 floorId: floor.id,
-                unitNumber: formatUnitNumber(body.numberFormat, wing.name, floorNo, u),
-                unitType: u === 1 ? "1BHK" : u <= 4 ? "2BHK" : "3BHK",
-                configuration: u === 1 ? "1 BHK" : u <= 4 ? "2 BHK" : "3 BHK",
-                carpetArea: u === 1 ? 520 : u <= 4 ? 780 : 1120,
-                builtUpArea: u === 1 ? 640 : u <= 4 ? 920 : 1320,
-                saleableArea: u === 1 ? 720 : u <= 4 ? 1050 : 1480,
-                facing: ["East", "West", "North", "South"][(u - 1) % 4],
-                parking: u === 1 ? "1 open" : "1 covered",
-                basePrice: u === 1 ? 4800000 : u <= 4 ? 7200000 : 9800000,
+                unitNumber: formatUnitNumber(body.numberFormat, wing.name, floorCfg.number, u + 1),
+                unitType: typed.unitType,
+                configuration: typed.configuration,
+                carpetArea: typed.carpetArea,
+                builtUpArea: typed.builtUpArea,
+                saleableArea: typed.saleableArea,
+                facing: ["East", "West", "North", "South"][u % 4],
+                parking: typed.parking,
+                basePrice: typed.basePrice,
                 plc: 150000,
                 otherCharges: 85000,
-                sortOrder: u,
+                sortOrder: u + 1,
                 status: "available",
               },
             });
@@ -233,8 +258,8 @@ projectsRouter.post(
         where: { id: projectId },
         data: {
           totalWings: body.wings.length,
-          totalFloors: body.floorsPerWing,
-          unitsPerFloor: body.unitsPerFloor,
+          totalFloors: maxFloors,
+          unitsPerFloor: typicalUnits,
           totalUnits: preview,
           numberFormat: body.numberFormat,
         },

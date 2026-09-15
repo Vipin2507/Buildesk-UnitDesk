@@ -136,6 +136,9 @@ companiesRouter.post(
       expectedCompletion: z.string().optional().nullable(),
       launchDate: z.string().optional().nullable(),
       photoUrl: z.string().optional().nullable(),
+      plan1bhkUrl: z.string().optional().nullable(),
+      plan2bhkUrl: z.string().optional().nullable(),
+      plan3bhkUrl: z.string().optional().nullable(),
       numberFormat: z.string().optional(),
     }),
   ),
@@ -157,6 +160,9 @@ companiesRouter.post(
       expectedCompletion?: string | null;
       launchDate?: string | null;
       photoUrl?: string | null;
+      plan1bhkUrl?: string | null;
+      plan2bhkUrl?: string | null;
+      plan3bhkUrl?: string | null;
       numberFormat?: string;
     };
     const created = await prisma.project.create({

@@ -45,6 +45,9 @@ model Project {
   expectedCompletion DateTime?
   launchDate         DateTime?
   photoUrl           String?
+  plan1bhkUrl         String?
+  plan2bhkUrl         String?
+  plan3bhkUrl         String?
   numberFormat       String           @default("[Wing]-[Floor][Unit:2]")
   wings              Wing[]
   users              ProjectAccess[]

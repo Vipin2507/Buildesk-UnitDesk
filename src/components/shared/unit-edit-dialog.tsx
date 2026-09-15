@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
-import { isCustomUnitPhoto, resolveUnitPhotoUrl } from "@/lib/unit-plans";
+import { isCustomUnitPhoto, projectPlansFrom, resolveUnitPhotoUrl, type ProjectPlanUrls } from "@/lib/unit-plans";
 
 type UnitDetail = {
   id: string;
@@ -29,6 +29,11 @@ type UnitDetail = {
   remarks: string | null;
   photoUrl: string | null;
   status: string;
+  floor?: {
+    wing?: {
+      project?: ProjectPlanUrls & { id?: string; name?: string };
+    };
+  };
 };
 
 type Form = {
@@ -148,7 +153,12 @@ export function UnitEditDialog({
             <div className="sm:col-span-2">
               <p className="mb-1.5 text-xs font-medium">Floor plan / unit photo</p>
               <UnitPlanImage
-                src={resolveUnitPhotoUrl(form.photoUrl, form.unitType, form.configuration)}
+                src={resolveUnitPhotoUrl(
+                  form.photoUrl,
+                  form.unitType,
+                  form.configuration,
+                  projectPlansFrom(unit?.floor?.wing?.project),
+                )}
                 size="lg"
                 className="max-w-xs"
                 editable
@@ -156,7 +166,7 @@ export function UnitEditDialog({
                 onChange={(url) => set("photoUrl", url)}
               />
               <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Defaults to the {form.configuration || form.unitType || "unit type"} plan. Replace to override for this unit.
+                Defaults to the project or system {form.configuration || form.unitType || "unit type"} plan. Replace to override for this unit.
               </p>
             </div>
             <Field label="Unit number">
