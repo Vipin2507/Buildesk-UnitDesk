@@ -50,6 +50,7 @@ jobs:
             mkdir -p uploads
             npm ci
             npx prisma generate
+            npx tsx scripts/migrate-booking-financials.ts
             npx prisma db push
             npm run build
 

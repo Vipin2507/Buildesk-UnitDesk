@@ -16,5 +16,5 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "server/**/*.ts", "prisma/seed.ts"]
+  "include": ["vite.config.ts", "server/**/*.ts", "prisma/seed.ts", "scripts/**/*.ts"]
 }
