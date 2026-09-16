@@ -143,25 +143,71 @@ export function Sidebar() {
         <RailLink to="/companies" icon={Building2} label="Companies" collapsed={collapsed} />
 
         {collapsed ? (
-          <RailLink to={projectId ? `/projects/${projectId}` : "/projects"} icon={Building} label="Projects" collapsed />
+          <RailLink to="/projects" icon={Building} label="Projects" collapsed end />
         ) : (
           <div>
-            <button
-              type="button"
-              onClick={toggleProjectsOpen}
+            <div
               className={cn(
-                "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-[13px] font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent",
-                projectActive && "text-white",
+                "flex w-full items-center rounded-md text-[13px] font-medium text-sidebar-foreground/80",
+                (projectActive || location.pathname === "/projects") && "text-white",
               )}
             >
-              <span className="flex items-center gap-2">
-                <Building className="h-4 w-4" />
-                Projects
-              </span>
-              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !projectsOpen && "-rotate-90")} />
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigate("/projects");
+                  if (!projectsOpen) toggleProjectsOpen();
+                }}
+                className={cn(
+                  "relative flex min-w-0 flex-1 items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-sidebar-accent",
+                  location.pathname === "/projects" && "bg-sidebar-accent text-white",
+                )}
+              >
+                {location.pathname === "/projects" ? (
+                  <motion.span
+                    layoutId="nav-pill"
+                    className="absolute inset-0 rounded-md bg-sidebar-accent"
+                    transition={{ type: "spring", stiffness: 390, damping: 34 }}
+                  />
+                ) : null}
+                <Building className="relative z-10 h-4 w-4" />
+                <span className="relative z-10 truncate">Projects</span>
+              </button>
+              <button
+                type="button"
+                onClick={toggleProjectsOpen}
+                className="mr-1 rounded-md p-1.5 hover:bg-sidebar-accent"
+                aria-label={projectsOpen ? "Collapse project menu" : "Expand project menu"}
+              >
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !projectsOpen && "-rotate-90")} />
+              </button>
+            </div>
             {projectsOpen ? (
               <div className="ml-2 space-y-0.5 border-l border-sidebar-border pl-2">
+                <NavLink
+                  to="/projects"
+                  end
+                  className={({ isActive }) =>
+                    cn(
+                      "relative flex items-center gap-2 rounded-md px-2 py-1 text-[12px] text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                      isActive && "text-white",
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive ? (
+                        <motion.span
+                          layoutId="nav-pill"
+                          className="absolute inset-0 rounded-md bg-sidebar-accent"
+                          transition={{ type: "spring", stiffness: 390, damping: 34 }}
+                        />
+                      ) : null}
+                      <Boxes className="relative z-10 h-3.5 w-3.5" />
+                      <span className="relative z-10">All projects</span>
+                    </>
+                  )}
+                </NavLink>
                 {projectChildren.map((child) => (
                   <NavLink
                     key={child.label}

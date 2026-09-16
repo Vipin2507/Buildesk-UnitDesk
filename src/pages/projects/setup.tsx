@@ -1,28 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import {
+  Building2,
+  Check,
+  ChevronDown,
+  Layers3,
+  Plus,
+  Sparkles,
+  Trash2,
+  Users,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CardSoft } from "@/components/shared/card-soft";
 import { Field } from "@/components/shared/field";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageWrap } from "@/components/shared/page-wrap";
-import { SegmentedTabs } from "@/components/shared/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, ApiError, type ListResponse } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { EASE, prefersReducedMotion, staggerDelay } from "@/lib/motion";
 import { qk } from "@/lib/query-keys";
 import {
   defaultStackTypes,
   formatUnitNumber,
   resizeStackTypes,
-  UNIT_TYPE_OPTIONS,
   type UnitTypeKey,
 } from "@/lib/units";
-
-type Tab = "wings" | "generate" | "details" | "pricing" | "users";
 
 type FloorCfg = { number: number; types: UnitTypeKey[] };
 type WingCfg = {
@@ -34,6 +40,18 @@ type WingCfg = {
   stackTypes: UnitTypeKey[];
   floors: FloorCfg[];
   open: boolean;
+};
+
+const TYPE_ORDER: UnitTypeKey[] = ["1BHK", "2BHK", "3BHK"];
+const TYPE_TONE: Record<UnitTypeKey, string> = {
+  "1BHK": "border-amber-500/35 bg-amber-500/12 text-amber-900 hover:bg-amber-500/18",
+  "2BHK": "border-primary/35 bg-primary/12 text-primary hover:bg-primary/18",
+  "3BHK": "border-emerald-500/35 bg-emerald-500/12 text-emerald-900 hover:bg-emerald-500/18",
+};
+const TYPE_DOT: Record<UnitTypeKey, string> = {
+  "1BHK": "bg-amber-500",
+  "2BHK": "bg-primary",
+  "3BHK": "bg-emerald-600",
 };
 
 function makeFloors(
@@ -61,41 +79,59 @@ function newWing(name: string, floorCount = 10, defaultUnits = 8, startFloor = 1
     startFloor,
     stackTypes,
     floors: makeFloors(floorCount, startFloor, stackTypes),
-    open: true,
+    open: false,
   };
 }
 
 function typeSummary(types: UnitTypeKey[]) {
   const counts: Record<UnitTypeKey, number> = { "1BHK": 0, "2BHK": 0, "3BHK": 0 };
   for (const t of types) counts[t] += 1;
-  return (["1BHK", "2BHK", "3BHK"] as UnitTypeKey[])
-    .filter((k) => counts[k] > 0)
+  return (TYPE_ORDER.filter((k) => counts[k] > 0) as UnitTypeKey[])
     .map((k) => `${counts[k]}×${k.replace("BHK", "B")}`)
     .join(" · ");
 }
 
-function TypeSelect({
+function nextType(value: UnitTypeKey): UnitTypeKey {
+  return TYPE_ORDER[(TYPE_ORDER.indexOf(value) + 1) % TYPE_ORDER.length]!;
+}
+
+function TypeChip({
   value,
   onChange,
-  compact,
+  size = "md",
 }: {
   value: UnitTypeKey;
   onChange: (v: UnitTypeKey) => void;
-  compact?: boolean;
+  size?: "sm" | "md";
 }) {
   return (
-    <Select value={value} onValueChange={(v) => onChange(v as UnitTypeKey)}>
-      <SelectTrigger className={cn(compact ? "h-7 text-[11px]" : "h-8")}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {UNIT_TYPE_OPTIONS.map((opt) => (
-          <SelectItem key={opt.value} value={opt.value}>
-            {opt.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <button
+      type="button"
+      title="Click to cycle 1 / 2 / 3 BHK"
+      onClick={() => onChange(nextType(value))}
+      className={cn(
+        "inline-flex items-center justify-center rounded-md border font-semibold tabular-nums transition-[transform,background-color,box-shadow] duration-200 active:scale-95",
+        TYPE_TONE[value],
+        size === "sm" ? "h-7 min-w-[3.25rem] px-1.5 text-[10px]" : "h-8 min-w-[3.75rem] px-2 text-[11px]",
+      )}
+    >
+      {value.replace("BHK", " BHK")}
+    </button>
+  );
+}
+
+function WingSilhouette({ floors, active }: { floors: number; active?: boolean }) {
+  const bars = Math.min(14, Math.max(3, floors));
+  return (
+    <div className={cn("flex h-11 items-end gap-0.5 rounded-lg px-2 py-1.5", active ? "bg-primary/10" : "bg-muted/60")}>
+      {Array.from({ length: bars }, (_, i) => (
+        <span
+          key={i}
+          className={cn("w-1.5 rounded-sm transition-colors", active ? "bg-primary/70" : "bg-foreground/20")}
+          style={{ height: `${28 + ((i * 17) % 40)}%` }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -103,10 +139,11 @@ export function ProjectSetupPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const uid = useId();
-  const [tab, setTab] = useState<Tab>("generate");
+  const reduced = prefersReducedMotion();
   const [numberFormat, setNumberFormat] = useState("[Wing]-[Floor][Unit:2]");
-  const [wings, setWings] = useState<WingCfg[]>([newWing("A"), newWing("B")]);
+  const [wings, setWings] = useState<WingCfg[]>([newWing("A", 10, 8, 1), newWing("B", 10, 8, 1)]);
+  const [activeWingKey, setActiveWingKey] = useState<string | null>(null);
+  const [showFormat, setShowFormat] = useState(false);
   const seeded = useRef(false);
 
   const { data: project } = useQuery({
@@ -129,23 +166,27 @@ export function ProjectSetupPage() {
     if (project.numberFormat) setNumberFormat(project.numberFormat);
     if (project.totalWings > 0) {
       const names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".slice(0, Math.min(26, project.totalWings)).split("");
-      setWings(
-        names.map((name) =>
-          newWing(name, project.totalFloors || 10, project.unitsPerFloor || 8, 1),
-        ),
-      );
+      const next = names.map((name, i) => ({
+        ...newWing(name, project.totalFloors || 10, project.unitsPerFloor || 8, 1),
+        open: i === 0,
+      }));
+      setWings(next);
+      setActiveWingKey(next[0]?.key ?? null);
     }
   }, [project]);
+
+  useEffect(() => {
+    if (!activeWingKey && wings[0]) setActiveWingKey(wings[0].key);
+  }, [activeWingKey, wings]);
 
   const preview = useMemo(
     () => wings.reduce((sum, w) => sum + w.floors.reduce((s, f) => s + f.types.length, 0), 0),
     [wings],
   );
+  const floorCount = useMemo(() => wings.reduce((s, w) => s + w.floors.length, 0), [wings]);
   const typeTotals = useMemo(() => {
     const counts: Record<UnitTypeKey, number> = { "1BHK": 0, "2BHK": 0, "3BHK": 0 };
-    for (const w of wings) {
-      for (const f of w.floors) for (const t of f.types) counts[t] += 1;
-    }
+    for (const w of wings) for (const f of w.floors) for (const t of f.types) counts[t] += 1;
     return counts;
   }, [wings]);
   const example = formatUnitNumber(
@@ -154,12 +195,13 @@ export function ProjectSetupPage() {
     wings[0]?.floors[0]?.number ?? 1,
     1,
   );
+  const activeWing = wings.find((w) => w.key === activeWingKey) ?? wings[0];
 
   function updateWing(key: string, patch: Partial<WingCfg>) {
     setWings((list) =>
       list.map((w) => {
         if (w.key !== key) return w;
-        let next = { ...w, ...patch };
+        const next = { ...w, ...patch };
         if (patch.defaultUnits !== undefined) {
           next.stackTypes = resizeStackTypes(w.stackTypes, patch.defaultUnits);
         }
@@ -194,6 +236,7 @@ export function ProjectSetupPage() {
           : w,
       ),
     );
+    toast.success("Stack types applied to all floors");
   }
 
   function setFloorUnitCount(wingKey: string, floorIndex: number, count: number) {
@@ -215,8 +258,7 @@ export function ProjectSetupPage() {
         if (w.key !== wingKey) return w;
         const floors = w.floors.map((f, i) => {
           if (i !== floorIndex) return f;
-          const types = f.types.map((t, si) => (si === slotIndex ? type : t));
-          return { ...f, types };
+          return { ...f, types: f.types.map((t, si) => (si === slotIndex ? type : t)) };
         });
         return { ...w, floors };
       }),
@@ -272,236 +314,356 @@ export function ProjectSetupPage() {
         w.floors.every((f) => f.types.length > 0 && f.types.every(Boolean)),
     );
 
+  function selectWing(key: string) {
+    setActiveWingKey(key);
+    setWings((list) => list.map((w) => ({ ...w, open: w.key === key })));
+  }
+
   return (
     <PageWrap>
       <PageHeader
         title="Project setup"
-        subtitle={project ? `${project.company.name} · ${project.name}` : "Wings, floors, units"}
+        subtitle={project ? `${project.company.name} · ${project.name}` : "Shape inventory before go-live"}
         breadcrumbs={[
           { label: "Projects", to: "/projects" },
           { label: project?.name ?? "Setup" },
         ]}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${id}`)}>
+            Overview
+          </Button>
+        }
       />
-      <SegmentedTabs
-        tabs={[
-          { id: "wings", label: "Wings & Floors" },
-          { id: "generate", label: "Unit Generation" },
-          { id: "details", label: "Unit Details" },
-          { id: "pricing", label: "Pricing" },
-          { id: "users", label: "Users" },
-        ]}
-        value={tab}
-        onChange={setTab}
+
+      {/* Live summary */}
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: EASE }}
+        className="relative overflow-hidden rounded-2xl border bg-card shadow-[var(--shadow-soft)]"
       >
-        {tab === "wings" || tab === "generate" ? (
-          <div className="max-w-4xl space-y-3">
-            <CardSoft className="space-y-2.5">
-              <Field label="Unit number format">
-                <Input className="h-8" value={numberFormat} onChange={(e) => setNumberFormat(e.target.value)} />
-              </Field>
-              <p className="text-xs text-muted-foreground">
-                Live example: <span className="font-medium text-foreground">{example}</span>
-                {" · "}
-                Total <span className="font-semibold tabular-nums text-foreground">{preview}</span> units
-                {" · "}
-                {typeTotals["1BHK"] ? `${typeTotals["1BHK"]}×1B ` : ""}
-                {typeTotals["2BHK"] ? `${typeTotals["2BHK"]}×2B ` : ""}
-                {typeTotals["3BHK"] ? `${typeTotals["3BHK"]}×3B` : ""}
-              </p>
-            </CardSoft>
-
-            <div className="space-y-2">
-              {wings.map((wing, wi) => {
-                const wingUnits = wing.floors.reduce((s, f) => s + f.types.length, 0);
-                return (
-                  <CardSoft key={wing.key} className="space-y-2.5 p-3">
-                    <div className="flex flex-wrap items-start gap-2">
-                      <button
-                        type="button"
-                        className="mt-1 text-muted-foreground"
-                        onClick={() => updateWing(wing.key, { open: !wing.open })}
-                        aria-label={wing.open ? "Collapse wing" : "Expand wing"}
-                      >
-                        <ChevronDown className={cn("h-4 w-4 transition-transform", !wing.open && "-rotate-90")} />
-                      </button>
-                      <Field label="Wing name" className="min-w-[5rem] flex-1">
-                        <Input
-                          className="h-8"
-                          value={wing.name}
-                          onChange={(e) => updateWing(wing.key, { name: e.target.value })}
-                        />
-                      </Field>
-                      <Field label="Floors">
-                        <Input
-                          className="h-8 w-20"
-                          type="number"
-                          min={1}
-                          max={60}
-                          value={wing.floorCount}
-                          onChange={(e) => updateWing(wing.key, { floorCount: Number(e.target.value) })}
-                        />
-                      </Field>
-                      <Field label="Start floor">
-                        <Input
-                          className="h-8 w-20"
-                          type="number"
-                          value={wing.startFloor}
-                          onChange={(e) => updateWing(wing.key, { startFloor: Number(e.target.value) })}
-                        />
-                      </Field>
-                      <Field label="Units / floor">
-                        <Input
-                          className="h-8 w-24"
-                          type="number"
-                          min={1}
-                          max={40}
-                          value={wing.defaultUnits}
-                          onChange={(e) => updateWing(wing.key, { defaultUnits: Number(e.target.value) })}
-                        />
-                      </Field>
-                      <div className="ml-auto flex items-end gap-1.5 pb-0.5">
-                        <p className="pb-1.5 text-[11px] tabular-nums text-muted-foreground">
-                          {wing.floors.length} fl · {wingUnits} units
-                        </p>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => applyStackToAllFloors(wing.key)}
-                        >
-                          Apply types to floors
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          disabled={wings.length <= 1}
-                          onClick={() => setWings((list) => list.filter((w) => w.key !== wing.key))}
-                          aria-label={`Remove wing ${wing.name}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border bg-muted/20 p-2">
-                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Default stack types — Wing {wing.name || wi + 1}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">{typeSummary(wing.stackTypes)}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 md:grid-cols-6">
-                        {wing.stackTypes.map((type, si) => (
-                          <label key={`${wing.key}-stack-${si}`} className="space-y-0.5">
-                            <span className="text-[10px] font-medium text-muted-foreground">U{si + 1}</span>
-                            <TypeSelect value={type} onChange={(v) => setStackType(wing.key, si, v)} compact />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {wing.open ? (
-                      <div className="space-y-2 rounded-lg border bg-card/60 p-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Per floor — count & types
-                        </p>
-                        {wing.floors.map((floor, fi) => (
-                          <div key={`${wing.key}-floor-${floor.number}-${fi}`} className="rounded-md border bg-muted/15 p-2">
-                            <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                              <span className="w-12 text-xs font-semibold tabular-nums">
-                                {floor.number === 0 ? "G" : `F${floor.number}`}
-                              </span>
-                              <Field label="Units">
-                                <Input
-                                  id={`${uid}-${wing.key}-${fi}-count`}
-                                  className="h-7 w-20"
-                                  type="number"
-                                  min={1}
-                                  max={40}
-                                  value={floor.types.length}
-                                  onChange={(e) => setFloorUnitCount(wing.key, fi, Number(e.target.value))}
-                                />
-                              </Field>
-                              <p className="text-[11px] text-muted-foreground">{typeSummary(floor.types)}</p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 md:grid-cols-6">
-                              {floor.types.map((type, si) => (
-                                <label key={`${wing.key}-${fi}-${si}`} className="space-y-0.5">
-                                  <span className="text-[10px] font-medium text-muted-foreground">U{si + 1}</span>
-                                  <TypeSelect
-                                    value={type}
-                                    onChange={(v) => setFloorSlotType(wing.key, fi, si, v)}
-                                    compact
-                                  />
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </CardSoft>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const next = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[wings.length] ?? `W${wings.length + 1}`;
-                  setWings((list) => [...list, newWing(next)]);
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add wing
-              </Button>
-              <Button
-                size="sm"
-                disabled={generate.isPending || !canGenerate}
-                onClick={() => {
-                  if (!confirm(`Generate ${preview} units with this layout & types? This replaces empty inventory.`)) {
-                    return;
-                  }
-                  generate.mutate();
-                }}
-              >
-                Generate {preview} units
-              </Button>
-            </div>
-          </div>
-        ) : null}
-        {tab === "details" || tab === "pricing" ? (
-          <CardSoft>
-            <p className="text-xs text-muted-foreground">
-              Type, areas and base price come from the configuration you set on each stack / floor above. Edit individual units later from Unit Master if needed.
+        <div
+          className="pointer-events-none absolute inset-0 opacity-70"
+          style={{
+            background:
+              "radial-gradient(circle at 0% 0%, color-mix(in oklab, var(--color-primary) 16%, transparent), transparent 45%), radial-gradient(circle at 100% 100%, color-mix(in oklab, var(--color-primary) 10%, transparent), transparent 40%)",
+          }}
+        />
+        <div className="relative grid gap-3 p-4 sm:grid-cols-[1.2fr_1fr] sm:items-center">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Inventory builder</p>
+            <h2 className="mt-1 text-lg font-semibold tracking-tight">Design wings, then assign unit types</h2>
+            <p className="mt-1 max-w-xl text-xs text-muted-foreground">
+              Click a type chip to cycle 1 / 2 / 3 BHK. Each wing can have its own floors and stack mix.
             </p>
-            <Button size="sm" className="mt-2" variant="outline" onClick={() => navigate(`/projects/${id}/units`)}>
-              Open unit master
+            <button
+              type="button"
+              className="mt-2 text-[11px] font-medium text-primary hover:underline"
+              onClick={() => setShowFormat((v) => !v)}
+            >
+              {showFormat ? "Hide numbering format" : "Unit numbering format"} · example {example}
+            </button>
+            {showFormat ? (
+              <div className="mt-2 max-w-md">
+                <Input
+                  className="h-9"
+                  value={numberFormat}
+                  onChange={(e) => setNumberFormat(e.target.value)}
+                  placeholder="[Wing]-[Floor][Unit:2]"
+                />
+              </div>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { label: "Wings", value: wings.length, icon: Building2 },
+              { label: "Floors", value: floorCount, icon: Layers3 },
+              { label: "Units", value: preview, icon: Sparkles },
+              { label: "Team", value: employees?.data.length ?? 0, icon: Users },
+            ].map((stat) => {
+              const Icon = stat.icon;
+              return (
+                <div key={stat.label} className="rounded-xl border bg-card/80 px-2.5 py-2 backdrop-blur-sm">
+                  <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <Icon className="h-3 w-3" />
+                    {stat.label}
+                  </div>
+                  <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{stat.value}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="relative flex flex-wrap gap-2 border-t bg-muted/30 px-4 py-2.5">
+          {TYPE_ORDER.map((key) => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-[11px] font-medium"
+            >
+              <i className={cn("h-2 w-2 rounded-full", TYPE_DOT[key])} />
+              {typeTotals[key]} {key.replace("BHK", " BHK")}
+            </span>
+          ))}
+        </div>
+      </motion.div>
+
+      <div className="grid gap-3 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        {/* Wing picker */}
+        <div className="space-y-2 lg:sticky lg:top-[4.25rem] lg:self-start">
+          <div className="flex items-center justify-between px-0.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Wings</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7"
+              onClick={() => {
+                const nextName = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[wings.length] ?? `W${wings.length + 1}`;
+                const wing = newWing(nextName);
+                setWings((list) => [...list.map((w) => ({ ...w, open: false })), { ...wing, open: true }]);
+                setActiveWingKey(wing.key);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add
             </Button>
-          </CardSoft>
-        ) : null}
-        {tab === "users" ? (
-          <CardSoft>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Employees</p>
-            <div className="space-y-1">
-              {(employees?.data ?? []).map((e) => (
-                <div key={e.id} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-xs">
-                  <span>{e.name}</span>
-                  <span className="text-muted-foreground">{e.email}</span>
+          </div>
+          <div className="space-y-1.5">
+            {wings.map((wing, i) => {
+              const units = wing.floors.reduce((s, f) => s + f.types.length, 0);
+              const active = wing.key === activeWing?.key;
+              return (
+                <motion.button
+                  key={wing.key}
+                  type="button"
+                  initial={reduced ? false : { opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: staggerDelay(i), duration: 0.28, ease: EASE }}
+                  onClick={() => selectWing(wing.key)}
+                  className={cn(
+                    "w-full rounded-xl border p-2.5 text-left transition-[box-shadow,border-color,transform] duration-200",
+                    active
+                      ? "border-primary/40 bg-card shadow-sm ring-2 ring-primary/25"
+                      : "bg-card/70 hover:-translate-y-0.5 hover:border-border hover:bg-card",
+                  )}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <WingSilhouette floors={wing.floorCount} active={active} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="truncate text-sm font-semibold">Wing {wing.name || "—"}</p>
+                        {active ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
+                      </div>
+                      <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                        {wing.floors.length} floors · {units} units
+                      </p>
+                      <p className="mt-1 truncate text-[10px] text-muted-foreground">{typeSummary(wing.stackTypes)}</p>
+                    </div>
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+
+          <CardSoft className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Access</p>
+            <div className="max-h-36 space-y-1 overflow-y-auto">
+              {(employees?.data ?? []).slice(0, 6).map((e) => (
+                <div key={e.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-[11px]">
+                  <span className="truncate font-medium">{e.name}</span>
+                  <span className="truncate text-muted-foreground">{e.email}</span>
                 </div>
               ))}
             </div>
-            <Button size="sm" className="mt-2" variant="outline" onClick={() => navigate("/users")}>
-              Manage access
+            <Button size="sm" variant="outline" className="w-full" onClick={() => navigate("/users")}>
+              Manage users
             </Button>
           </CardSoft>
+        </div>
+
+        {/* Active wing editor */}
+        {activeWing ? (
+          <motion.div
+            key={activeWing.key}
+            initial={reduced ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="space-y-3"
+          >
+            <CardSoft className="space-y-3 p-3 sm:p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Shape</p>
+                  <h3 className="text-base font-semibold tracking-tight">Wing {activeWing.name || "—"}</h3>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
+                  disabled={wings.length <= 1}
+                  onClick={() => {
+                    const next = wings.filter((w) => w.key !== activeWing.key);
+                    setWings(next);
+                    setActiveWingKey(next[0]?.key ?? null);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove wing
+                </Button>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-4">
+                <Field label="Wing name">
+                  <Input
+                    className="h-9"
+                    value={activeWing.name}
+                    onChange={(e) => updateWing(activeWing.key, { name: e.target.value })}
+                  />
+                </Field>
+                <Field label="Floors">
+                  <Input
+                    className="h-9"
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={activeWing.floorCount}
+                    onChange={(e) => updateWing(activeWing.key, { floorCount: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Start floor">
+                  <Input
+                    className="h-9"
+                    type="number"
+                    value={activeWing.startFloor}
+                    onChange={(e) => updateWing(activeWing.key, { startFloor: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Units / floor">
+                  <Input
+                    className="h-9"
+                    type="number"
+                    min={1}
+                    max={40}
+                    value={activeWing.defaultUnits}
+                    onChange={(e) => updateWing(activeWing.key, { defaultUnits: Number(e.target.value) })}
+                  />
+                </Field>
+              </div>
+            </CardSoft>
+
+            <CardSoft className="space-y-3 p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Default stack</p>
+                  <p className="text-sm text-muted-foreground">
+                    One type per stack position · {typeSummary(activeWing.stackTypes)}
+                  </p>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={() => applyStackToAllFloors(activeWing.key)}>
+                  Apply to all floors
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {activeWing.stackTypes.map((type, si) => (
+                  <div key={`${activeWing.key}-stack-${si}`} className="flex flex-col items-center gap-1">
+                    <span className="text-[10px] font-medium text-muted-foreground">U{si + 1}</span>
+                    <TypeChip value={type} onChange={(v) => setStackType(activeWing.key, si, v)} />
+                  </div>
+                ))}
+              </div>
+            </CardSoft>
+
+            <CardSoft padded={false} className="overflow-hidden">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 border-b bg-muted/25 px-3 py-2.5 text-left"
+                onClick={() => updateWing(activeWing.key, { open: !activeWing.open })}
+              >
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Floor overrides</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optional — change unit count or types on specific floors
+                  </p>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", activeWing.open && "rotate-180")} />
+              </button>
+
+              {activeWing.open ? (
+                <div className="max-h-[28rem] space-y-2 overflow-y-auto p-3">
+                  {activeWing.floors.map((floor, fi) => (
+                    <div
+                      key={`${activeWing.key}-floor-${floor.number}-${fi}`}
+                      className="rounded-xl border bg-muted/15 p-2.5 transition-colors hover:bg-muted/25"
+                    >
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex h-7 min-w-10 items-center justify-center rounded-md bg-card px-2 text-xs font-semibold tabular-nums shadow-sm">
+                          {floor.number === 0 ? "G" : `F${floor.number}`}
+                        </span>
+                        <Field label="Units">
+                          <Input
+                            className="h-8 w-20"
+                            type="number"
+                            min={1}
+                            max={40}
+                            value={floor.types.length}
+                            onChange={(e) => setFloorUnitCount(activeWing.key, fi, Number(e.target.value))}
+                          />
+                        </Field>
+                        <p className="text-[11px] text-muted-foreground">{typeSummary(floor.types)}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {floor.types.map((type, si) => (
+                          <div key={`${activeWing.key}-${fi}-${si}`} className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground">U{si + 1}</span>
+                            <TypeChip
+                              size="sm"
+                              value={type}
+                              onChange={(v) => setFloorSlotType(activeWing.key, fi, si, v)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </CardSoft>
+          </motion.div>
         ) : null}
-      </SegmentedTabs>
+      </div>
+
+      {/* Generate bar */}
+      <div className="sticky bottom-2 z-20 mt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-card/95 px-3 py-2.5 shadow-[var(--shadow-elevated)] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:px-4">
+          <div>
+            <p className="text-sm font-semibold tabular-nums">
+              Ready to generate <span className="text-primary">{preview}</span> units
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {wings.length} wings · {floorCount} floors · replaces empty inventory
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${id}/units`)}>
+              Unit master
+            </Button>
+            <Button
+              size="sm"
+              disabled={generate.isPending || !canGenerate}
+              onClick={() => {
+                if (!confirm(`Generate ${preview} units with this layout & types? This replaces empty inventory.`)) {
+                  return;
+                }
+                generate.mutate();
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {generate.isPending ? "Generating…" : `Generate ${preview} units`}
+            </Button>
+          </div>
+        </div>
+      </div>
     </PageWrap>
   );
 }

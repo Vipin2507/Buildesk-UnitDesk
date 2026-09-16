@@ -75,7 +75,7 @@ export function ProjectsListPage() {
     <PageWrap>
       <PageHeader
         title={company ? company.name : "Projects"}
-        subtitle="Projects under this company"
+        subtitle={company ? "Projects under this company" : "All projects across companies"}
         breadcrumbs={companyId ? [{ label: "Companies", to: "/companies" }, { label: company?.name ?? "…" }] : undefined}
         actions={
           <Button
