@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Ban, Building2, ChevronRight, CircleDot, Download, LayoutGrid, Lock, Plus, ShoppingBag, Square, Table2 } from "lucide-react";
+import { Ban, Building2, ChevronRight, CircleDot, Download, LayoutGrid, Lock, Plus, ShoppingBag, Square, Table2, Upload } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CardSoft } from "@/components/shared/card-soft";
@@ -16,6 +16,13 @@ import { StatusPill } from "@/components/shared/status-pill";
 import { DataTable } from "@/components/shared/data-table";
 import { UnitDetailPanel } from "@/components/shared/unit-detail-panel";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { UNIT_DOC_UPLOAD_ACTIONS, useUnitBulkUpload } from "@/hooks/use-unit-bulk-upload";
 import { api, ApiError } from "@/lib/api";
 import { formatDate, pct } from "@/lib/format";
 import { useMediaQuery } from "@/lib/media";
@@ -93,6 +100,7 @@ export function InventoryViewPage() {
   const reduced = prefersReducedMotion();
   const isLg = useMediaQuery("(min-width: 1024px)");
   const panelRef = useRef<HTMLElement>(null);
+  const bulkUpload = useUnitBulkUpload(id);
 
   const { data } = useQuery({
     queryKey: qk.inventory(id!),
@@ -191,6 +199,26 @@ export function InventoryViewPage() {
         ]}
         actions={
           <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={!selectedId || bulkUpload.uploading}>
+                  <Upload className="h-3.5 w-3.5" />
+                  {bulkUpload.uploading ? "Uploading…" : "Bulk upload"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {UNIT_DOC_UPLOAD_ACTIONS.map((action) => (
+                  <DropdownMenuItem
+                    key={action.category}
+                    disabled={!selectedId || bulkUpload.uploading}
+                    onClick={() => selectedId && bulkUpload.start(selectedId, action.category)}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {action.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${id}/edit`)}>
               Edit project
             </Button>
@@ -206,6 +234,7 @@ export function InventoryViewPage() {
           </>
         }
       />
+      {bulkUpload.fileInput}
 
       <CardSoft className="flex flex-col gap-3 md:flex-row md:items-stretch">
         <div className="w-full shrink-0 md:w-56">
@@ -405,6 +434,36 @@ export function InventoryViewPage() {
                   { key: "floor", header: "Floor", cell: (r) => r.floor },
                   { key: "type", header: "Type", cell: (r) => r.unitType ?? "—" },
                   { key: "status", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
+                  {
+                    key: "upload",
+                    header: "",
+                    hideOnMobile: true,
+                    cell: (r) => (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={bulkUpload.uploading}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          {UNIT_DOC_UPLOAD_ACTIONS.map((action) => (
+                            <DropdownMenuItem
+                              key={action.category}
+                              disabled={bulkUpload.uploading}
+                              onClick={() => bulkUpload.start(r.id, action.category)}
+                            >
+                              {action.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ),
+                  },
                 ]}
               />
             ) : (

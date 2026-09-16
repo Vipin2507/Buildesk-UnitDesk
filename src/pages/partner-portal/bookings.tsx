@@ -16,7 +16,7 @@ type Booking = {
   status: string;
   project: { name: string };
   unit: { unitNumber: string };
-  financials: { totalCost: number } | null;
+  financials: { totalDealValue: number } | null;
   entitlement: { entitlementAmount: number; received: number; outstanding: number } | null;
 };
 
@@ -39,7 +39,7 @@ export function PartnerPortalBookings() {
             { key: "no", header: "Booking", cell: (r) => r.bookingNumber },
             { key: "pr", header: "Project", cell: (r) => r.project.name },
             { key: "un", header: "Unit", cell: (r) => r.unit.unitNumber },
-            { key: "val", header: "Value", cell: (r) => inr(r.financials?.totalCost) },
+            { key: "val", header: "Value", cell: (r) => inr(r.financials?.totalDealValue) },
             { key: "ent", header: "Share", cell: (r) => inr(r.entitlement?.entitlementAmount) },
             { key: "rec", header: "Received", cell: (r) => inr(r.entitlement?.received) },
             { key: "out", header: "Outstanding", cell: (r) => inr(r.entitlement?.outstanding) },

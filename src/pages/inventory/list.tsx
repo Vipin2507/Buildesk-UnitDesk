@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, MoreHorizontal, Plus, Search } from "lucide-react";
+import { Download, LayoutGrid, MoreHorizontal, Plus, Search, Upload } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -18,12 +18,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { UNIT_DOC_UPLOAD_ACTIONS, useUnitBulkUpload } from "@/hooks/use-unit-bulk-upload";
 import { api, ApiError, type ListResponse } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { resolveUnitPhotoUrl, projectPlansFrom } from "@/lib/unit-plans";
 import { useDrilldownSheetStore } from "@/stores/drilldown";
 import { useInventoryFilterStore } from "@/stores/inventory-filters";
-import { LayoutGrid } from "lucide-react";
 
 type UnitRow = {
   id: string;
@@ -43,6 +43,7 @@ export function UnitMasterPage() {
   const filters = useInventoryFilterStore();
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState<UnitRow | null>(null);
+  const bulkUpload = useUnitBulkUpload(id);
 
   const { data: project } = useQuery({
     queryKey: qk.project(id!),
@@ -112,6 +113,7 @@ export function UnitMasterPage() {
           </>
         }
       />
+      {bulkUpload.fileInput}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-xs flex-1">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -177,6 +179,17 @@ export function UnitMasterPage() {
                   <DropdownMenuItem onClick={() => navigate(`/projects/${id}/units/${r.id}/edit`)}>Edit</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => openSheet("unit", r.id)}>Quick view</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate(`/projects/${id}/units/new`)}>Add another unit</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {UNIT_DOC_UPLOAD_ACTIONS.map((action) => (
+                    <DropdownMenuItem
+                      key={action.category}
+                      disabled={bulkUpload.uploading}
+                      onClick={() => bulkUpload.start(r.id, action.category)}
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      {action.label}
+                    </DropdownMenuItem>
+                  ))}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="text-destructive" onClick={() => setConfirm(r)}>
                     Delete

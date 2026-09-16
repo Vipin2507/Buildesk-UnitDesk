@@ -86,7 +86,7 @@ export async function bootstrapPhase2() {
       await issueDocument(prisma, {
         bookingId: booking.id,
         kind: "invoice",
-        amount: booking.financials.totalCost,
+        amount: booking.financials.totalDealValue,
         tax: booking.financials.gst,
         notes: `Agreement invoice for ${booking.bookingNumber}`,
       });

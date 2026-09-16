@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, ChevronLeft, ChevronRight, FileText, LayoutTemplate, MoreHorizontal, Pencil, Plus, UserRound } from "lucide-react";
+import { Ban, ChevronLeft, ChevronRight, FileText, LayoutTemplate, MoreHorizontal, Pencil, Plus, Upload, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UNIT_DOC_UPLOAD_ACTIONS, useUnitBulkUpload } from "@/hooks/use-unit-bulk-upload";
 import { api, ApiError, type ListResponse } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { floorLabel, formatDate, inr } from "@/lib/format";
@@ -65,13 +66,12 @@ type UnitDetail = {
     status: string;
     customers: Array<{ name: string; mobile: string; email?: string | null; role: string }>;
     financials: {
-      totalCost: number;
-      agreementValue: number;
+      totalDealValue: number;
+      dealValueWithoutGst: number;
       gst?: number;
-      stampDuty?: number;
-      registration?: number;
       discount?: number;
-      basicSaleValue?: number;
+      receivedPayment?: number;
+      pendingAmount?: number;
     } | null;
   }>;
 };
@@ -126,6 +126,7 @@ export function UnitDetailPanel({
 
   const booking = data?.bookings?.find((b) => b.status !== "cancelled");
   const projectId = data?.floor.wing.project.id;
+  const bulkUpload = useUnitBulkUpload(projectId);
   const index = unitId ? navIds.indexOf(unitId) : -1;
   const prevId = index > 0 ? navIds[index - 1] : undefined;
   const nextId = index >= 0 && index < navIds.length - 1 ? navIds[index + 1] : undefined;
@@ -151,6 +152,12 @@ export function UnitDetailPanel({
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update photo"),
   });
+
+  function startBulkUpload(category: string) {
+    if (!unitId) return;
+    setTab("documents");
+    bulkUpload.start(unitId, category, booking?.id);
+  }
 
   function goNeighbor(id?: string) {
     if (!id) return;
@@ -192,6 +199,7 @@ export function UnitDetailPanel({
         </div>
       ) : (
         <>
+          {bulkUpload.fileInput}
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-stretch gap-3 px-3 pt-3">
               <div className="min-w-0 w-[9.5rem] shrink-0">
@@ -316,13 +324,12 @@ export function UnitDetailPanel({
                 {tab === "financials" ? (
                   booking?.financials ? (
                     <div>
-                      <Row label="Basic sale value" value={inr(booking.financials.basicSaleValue)} />
-                      <Row label="Agreement value" value={inr(booking.financials.agreementValue)} />
+                      <Row label="Total deal value" value={inr(booking.financials.totalDealValue)} />
+                      <Row label="Deal value without GST" value={inr(booking.financials.dealValueWithoutGst)} />
                       <Row label="GST" value={inr(booking.financials.gst)} />
-                      <Row label="Stamp duty" value={inr(booking.financials.stampDuty)} />
-                      <Row label="Registration" value={inr(booking.financials.registration)} />
                       <Row label="Discount" value={inr(booking.financials.discount)} />
-                      <Row label="Total cost" value={inr(booking.financials.totalCost)} />
+                      <Row label="Received payment" value={inr(booking.financials.receivedPayment)} />
+                      <Row label="Pending amount" value={inr(booking.financials.pendingAmount)} />
                     </div>
                   ) : (
                     <EmptyState icon={FileText} title="No financials captured yet." />
@@ -330,14 +337,20 @@ export function UnitDetailPanel({
                 ) : null}
 
                 {tab === "documents" && shown && projectId ? (
-                  <DocumentsPanel
-                    compact
-                    projectId={projectId}
-                    unitId={shown.id}
-                    bookingId={booking?.id}
-                    entityType="unit"
-                    entityId={shown.id}
-                  />
+                  <div className="space-y-2">
+                    {bulkUpload.uploading ? (
+                      <p className="text-xs text-muted-foreground">Uploading documents…</p>
+                    ) : null}
+                    <DocumentsPanel
+                      compact
+                      showBulkActions
+                      projectId={projectId}
+                      unitId={shown.id}
+                      bookingId={booking?.id}
+                      entityType="unit"
+                      entityId={shown.id}
+                    />
+                  </div>
                 ) : null}
 
                 {tab === "activity" ? (
@@ -420,6 +433,23 @@ export function UnitDetailPanel({
                       Open booking
                     </DropdownMenuItem>
                   ) : null}
+                  <DropdownMenuSeparator />
+                  {UNIT_DOC_UPLOAD_ACTIONS.map((action) => (
+                    <DropdownMenuItem
+                      key={action.category}
+                      disabled={bulkUpload.uploading}
+                      onClick={() => startBulkUpload(action.category)}
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      {action.label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuItem
+                    onClick={() => setTab("documents")}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Open documents
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setEditing(true)}>Edit unit</DropdownMenuItem>
                   <DropdownMenuItem

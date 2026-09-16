@@ -99,10 +99,12 @@ function TypeChip({
   value,
   onChange,
   size = "md",
+  className,
 }: {
   value: UnitTypeKey;
   onChange: (v: UnitTypeKey) => void;
   size?: "sm" | "md";
+  className?: string;
 }) {
   return (
     <button
@@ -113,10 +115,42 @@ function TypeChip({
         "inline-flex items-center justify-center rounded-md border font-semibold tabular-nums transition-[transform,background-color,box-shadow] duration-200 active:scale-95",
         TYPE_TONE[value],
         size === "sm" ? "h-7 min-w-[3.25rem] px-1.5 text-[10px]" : "h-8 min-w-[3.75rem] px-2 text-[11px]",
+        className,
       )}
     >
       {value.replace("BHK", " BHK")}
     </button>
+  );
+}
+
+function UnitTypeStack({
+  types,
+  size = "md",
+  onChange,
+  keyPrefix,
+}: {
+  types: UnitTypeKey[];
+  size?: "sm" | "md";
+  onChange: (slotIndex: number, type: UnitTypeKey) => void;
+  keyPrefix: string;
+}) {
+  const col = size === "sm" ? "w-[3.25rem]" : "w-[3.75rem]";
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {types.map((type, si) => (
+        <div key={`${keyPrefix}-${si}`} className={cn("flex flex-col items-center gap-1", col)}>
+          <span className="w-full text-center text-[10px] font-medium leading-none text-muted-foreground">
+            U{si + 1}
+          </span>
+          <TypeChip
+            size={size}
+            className="w-full"
+            value={type}
+            onChange={(v) => onChange(si, v)}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -564,14 +598,11 @@ export function ProjectSetupPage() {
                   Apply to all floors
                 </Button>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {activeWing.stackTypes.map((type, si) => (
-                  <div key={`${activeWing.key}-stack-${si}`} className="flex flex-col items-center gap-1">
-                    <span className="text-[10px] font-medium text-muted-foreground">U{si + 1}</span>
-                    <TypeChip value={type} onChange={(v) => setStackType(activeWing.key, si, v)} />
-                  </div>
-                ))}
-              </div>
+              <UnitTypeStack
+                keyPrefix={`${activeWing.key}-stack`}
+                types={activeWing.stackTypes}
+                onChange={(si, v) => setStackType(activeWing.key, si, v)}
+              />
             </CardSoft>
 
             <CardSoft padded={false} className="overflow-hidden">
@@ -596,11 +627,12 @@ export function ProjectSetupPage() {
                       key={`${activeWing.key}-floor-${floor.number}-${fi}`}
                       className="rounded-xl border bg-muted/15 p-2.5 transition-colors hover:bg-muted/25"
                     >
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex h-7 min-w-10 items-center justify-center rounded-md bg-card px-2 text-xs font-semibold tabular-nums shadow-sm">
+                      <div className="mb-2.5 flex flex-wrap items-end gap-2.5">
+                        <span className="inline-flex h-8 min-w-10 items-center justify-center rounded-md bg-card px-2 text-xs font-semibold tabular-nums shadow-sm">
                           {floor.number === 0 ? "G" : `F${floor.number}`}
                         </span>
-                        <Field label="Units">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Units</p>
                           <Input
                             className="h-8 w-20"
                             type="number"
@@ -609,21 +641,17 @@ export function ProjectSetupPage() {
                             value={floor.types.length}
                             onChange={(e) => setFloorUnitCount(activeWing.key, fi, Number(e.target.value))}
                           />
-                        </Field>
-                        <p className="text-[11px] text-muted-foreground">{typeSummary(floor.types)}</p>
+                        </div>
+                        <p className="pb-2 text-[11px] leading-none text-muted-foreground">
+                          {typeSummary(floor.types)}
+                        </p>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {floor.types.map((type, si) => (
-                          <div key={`${activeWing.key}-${fi}-${si}`} className="flex flex-col items-center gap-1">
-                            <span className="text-[10px] text-muted-foreground">U{si + 1}</span>
-                            <TypeChip
-                              size="sm"
-                              value={type}
-                              onChange={(v) => setFloorSlotType(activeWing.key, fi, si, v)}
-                            />
-                          </div>
-                        ))}
-                      </div>
+                      <UnitTypeStack
+                        size="sm"
+                        keyPrefix={`${activeWing.key}-${fi}`}
+                        types={floor.types}
+                        onChange={(si, v) => setFloorSlotType(activeWing.key, fi, si, v)}
+                      />
                     </div>
                   ))}
                 </div>

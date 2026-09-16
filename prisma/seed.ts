@@ -280,10 +280,15 @@ async function main() {
   ];
 
   for (const [i, unit] of bookable.slice(0, 36).entries()) {
-    const totalCost =
-      unit.number.endsWith("06") || unit.number.endsWith("07") || unit.number.endsWith("08") ? 1_12_50_000 : 84_80_000;
+    const dealWithoutGst =
+      unit.number.endsWith("06") || unit.number.endsWith("07") || unit.number.endsWith("08") ? 1_07_14_286 : 80_76_190;
+    const gst = Math.round(dealWithoutGst * 0.05);
+    const discount = 50000;
+    const totalDealValue = Math.max(0, dealWithoutGst + gst - discount);
+    const receivedPayment = Math.round(totalDealValue * 0.1);
+    const pendingAmount = Math.max(0, totalDealValue - receivedPayment);
     const partner = i % 3 === 0 ? partners[0] : i % 3 === 1 ? partners[1] : null;
-    const snap = partner ? computeEntitlement(pctRule, totalCost) : null;
+    const snap = partner ? computeEntitlement(pctRule, totalDealValue) : null;
     const date = new Date(2025, (i % 10) + 1, (i % 27) + 1);
     const buyer = names[i % names.length];
     const mail = `${slug(buyer)}${i >= names.length ? i : ""}@${DOMAIN}`;
@@ -310,17 +315,12 @@ async function main() {
         },
         financials: {
           create: {
-            basicSaleValue: totalCost - 250000,
-            agreementValue: totalCost - 80000,
-            gst: 420000,
-            stampDuty: 180000,
-            registration: 45000,
-            otherCharges: 85000,
-            discount: 50000,
-            totalCost,
-            finalAgreementValue: totalCost - 80000,
-            cashComponent: Math.round(totalCost * 0.2),
-            financedComponent: Math.round(totalCost * 0.8),
+            totalDealValue,
+            dealValueWithoutGst: dealWithoutGst,
+            gst,
+            discount,
+            receivedPayment,
+            pendingAmount,
           },
         },
       },

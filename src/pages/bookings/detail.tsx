@@ -31,12 +31,12 @@ type Booking = {
   project: { name: string };
   customers: { id: string; role: string; name: string; mobile: string; email: string | null }[];
   financials: {
-    basicSaleValue: number;
-    otherCharges: number;
-    totalCost: number;
-    agreementValue: number;
-    cashComponent: number;
-    financedComponent: number;
+    totalDealValue: number;
+    dealValueWithoutGst: number;
+    gst: number;
+    discount: number;
+    receivedPayment: number;
+    pendingAmount: number;
   } | null;
   entitlement: {
     entitlementPercent: number | null;
@@ -139,18 +139,18 @@ export function BookingDetailPage() {
         <CardSoft className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Financial details</p>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <span className="text-muted-foreground">Basic sale value</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.basicSaleValue)}</span>
-            <span className="text-muted-foreground">Other charges</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.otherCharges)}</span>
-            <span className="text-muted-foreground">Total cost</span>
-            <span className="text-right font-semibold tabular-nums">{inr(data?.financials?.totalCost)}</span>
-            <span className="text-muted-foreground">Agreement value</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.agreementValue)}</span>
-            <span className="text-muted-foreground">Cash component</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.cashComponent)}</span>
-            <span className="text-muted-foreground">Financed component</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.financedComponent)}</span>
+            <span className="text-muted-foreground">Total deal value</span>
+            <span className="text-right font-semibold tabular-nums">{inr(data?.financials?.totalDealValue)}</span>
+            <span className="text-muted-foreground">Deal value without GST</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.dealValueWithoutGst)}</span>
+            <span className="text-muted-foreground">GST</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.gst)}</span>
+            <span className="text-muted-foreground">Discount</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.discount)}</span>
+            <span className="text-muted-foreground">Received payment</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.receivedPayment)}</span>
+            <span className="text-muted-foreground">Pending amount</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.pendingAmount)}</span>
           </div>
         </CardSoft>
       </div>

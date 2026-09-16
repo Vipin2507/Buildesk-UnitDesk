@@ -43,14 +43,12 @@ export function BookingFormPage() {
     { role: "primary", name: "", mobile: "", email: "", pan: "" },
   ]);
   const [financials, setFinancials] = useState({
-    basicSaleValue: 0,
-    otherCharges: 0,
-    discount: 0,
+    totalDealValue: 0,
+    dealValueWithoutGst: 0,
     gst: 0,
-    stampDuty: 0,
-    registration: 0,
-    cashComponent: 0,
-    financedComponent: 0,
+    discount: 0,
+    receivedPayment: 0,
+    pendingAmount: 0,
   });
   const [pendingFiles, setPendingFiles] = useState<{ file: File; category: string }[]>([]);
   const [partnerId, setPartnerId] = useState("");
@@ -82,21 +80,29 @@ export function BookingFormPage() {
   });
 
   const selectedUnit = units?.data.find((u) => u.id === unitId);
-  const totalCost =
-    financials.basicSaleValue +
-    financials.otherCharges +
-    financials.gst +
-    financials.stampDuty +
-    financials.registration -
-    financials.discount;
-  const agreementValue = financials.basicSaleValue + financials.otherCharges - financials.discount;
   const activeRule = rules?.data.find((r) => r.active);
   const partnerShare =
     activeRule?.type === "percentage"
-      ? (totalCost * (activeRule.value ?? 0)) / 100
+      ? (financials.totalDealValue * (activeRule.value ?? 0)) / 100
       : activeRule?.type === "flat_per_unit"
         ? (activeRule.value ?? 0)
         : 0;
+
+  function patchFinancials(patch: Partial<typeof financials>) {
+    setFinancials((f) => {
+      const next = { ...f, ...patch };
+      if (patch.totalDealValue !== undefined || patch.receivedPayment !== undefined) {
+        next.pendingAmount = Math.max(0, next.totalDealValue - next.receivedPayment);
+      }
+      if (patch.dealValueWithoutGst !== undefined || patch.gst !== undefined || patch.discount !== undefined) {
+        if (patch.totalDealValue === undefined) {
+          next.totalDealValue = Math.max(0, next.dealValueWithoutGst + next.gst - next.discount);
+          next.pendingAmount = Math.max(0, next.totalDealValue - next.receivedPayment);
+        }
+      }
+      return next;
+    });
+  }
 
   const save = useMutation({
     mutationFn: async () => {
@@ -108,17 +114,12 @@ export function BookingFormPage() {
         status,
         customers: customers.map((c) => ({ ...c, email: c.email || null })),
         financials: {
-          basicSaleValue: financials.basicSaleValue,
-          agreementValue,
+          totalDealValue: financials.totalDealValue,
+          dealValueWithoutGst: financials.dealValueWithoutGst,
           gst: financials.gst,
-          stampDuty: financials.stampDuty,
-          registration: financials.registration,
-          otherCharges: financials.otherCharges,
           discount: financials.discount,
-          totalCost,
-          finalAgreementValue: agreementValue,
-          cashComponent: financials.cashComponent,
-          financedComponent: financials.financedComponent,
+          receivedPayment: financials.receivedPayment,
+          pendingAmount: financials.pendingAmount,
         },
       });
       for (const item of pendingFiles) {
@@ -147,9 +148,9 @@ export function BookingFormPage() {
   const canNext = useMemo(() => {
     if (step === 0) return projectId && unitId;
     if (step === 1) return customers[0]?.name && customers[0]?.mobile;
-    if (step === 2) return totalCost > 0;
+    if (step === 2) return financials.totalDealValue > 0;
     return true;
-  }, [step, projectId, unitId, customers, totalCost]);
+  }, [step, projectId, unitId, customers, financials.totalDealValue]);
 
   return (
     <PageWrap>
@@ -188,17 +189,21 @@ export function BookingFormPage() {
               <Select value={unitId} onValueChange={(v) => {
                 setUnitId(v);
                 const u = units?.data.find((x) => x.id === v);
-                if (u?.basePrice) {
-                  setFinancials((f) => ({
-                    ...f,
-                    basicSaleValue: u.basePrice ?? 0,
-                    otherCharges: 85000,
-                    gst: Math.round((u.basePrice ?? 0) * 0.05),
-                    stampDuty: Math.round((u.basePrice ?? 0) * 0.05),
-                    registration: 45000,
-                    cashComponent: Math.round((u.basePrice ?? 0) * 0.2),
-                    financedComponent: Math.round((u.basePrice ?? 0) * 0.8),
-                  }));
+                if (u?.basePrice != null) {
+                  const base = u.basePrice ?? 0;
+                  const gst = Math.round(base * 0.05);
+                  const discount = 0;
+                  const dealWithoutGst = base;
+                  const total = Math.max(0, dealWithoutGst + gst - discount);
+                  const received = Math.round(total * 0.1);
+                  setFinancials({
+                    dealValueWithoutGst: dealWithoutGst,
+                    gst,
+                    discount,
+                    totalDealValue: total,
+                    receivedPayment: received,
+                    pendingAmount: Math.max(0, total - received),
+                  });
                 }
               }}>
                 <SelectTrigger className="h-10"><SelectValue placeholder="Select unit" /></SelectTrigger>
@@ -262,14 +267,12 @@ export function BookingFormPage() {
           <div className="grid gap-2.5 sm:grid-cols-2">
             {(
               [
-                ["basicSaleValue", "Basic sale value"],
-                ["otherCharges", "Other charges"],
-                ["discount", "Discount"],
+                ["totalDealValue", "Total deal value"],
+                ["dealValueWithoutGst", "Deal value without GST"],
                 ["gst", "GST"],
-                ["stampDuty", "Stamp duty"],
-                ["registration", "Registration"],
-                ["cashComponent", "Cash component"],
-                ["financedComponent", "Financed component"],
+                ["discount", "Discount"],
+                ["receivedPayment", "Received payment"],
+                ["pendingAmount", "Pending amount"],
               ] as const
             ).map(([k, label]) => (
               <Field key={k} label={label}>
@@ -277,13 +280,13 @@ export function BookingFormPage() {
                   className="h-8"
                   type="number"
                   value={financials[k]}
-                  onChange={(e) => setFinancials((f) => ({ ...f, [k]: Number(e.target.value) }))}
+                  onChange={(e) => patchFinancials({ [k]: Number(e.target.value) })}
                 />
               </Field>
             ))}
             <p className="sm:col-span-2 text-sm">
-              Total cost <span className="font-semibold tabular-nums">{inr(totalCost)}</span>
-              {" · "}Agreement <span className="font-semibold tabular-nums">{inr(agreementValue)}</span>
+              Total deal <span className="font-semibold tabular-nums">{inr(financials.totalDealValue)}</span>
+              {" · "}Pending <span className="font-semibold tabular-nums">{inr(financials.pendingAmount)}</span>
             </p>
           </div>
         )}

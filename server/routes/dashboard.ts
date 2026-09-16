@@ -41,7 +41,7 @@ dashboardRouter.get(
         available: byStatus("available"),
         hold: byStatus("hold"),
         sold: byStatus("sold"),
-        bookingValue: bookings.reduce((s, b) => s + (b.financials?.totalCost ?? 0), 0),
+        bookingValue: bookings.reduce((s, b) => s + (b.financials?.totalDealValue ?? 0), 0),
       },
       status: [
         { name: "Available", value: byStatus("available"), key: "available" },
@@ -79,7 +79,7 @@ dashboardRouter.get(
         booked: byStatus("booked"),
         sold: byStatus("sold"),
         hold: byStatus("hold"),
-        bookingValue: bookings.reduce((s, b) => s + (b.financials?.totalCost ?? 0), 0),
+        bookingValue: bookings.reduce((s, b) => s + (b.financials?.totalDealValue ?? 0), 0),
         partnerOutstanding: bookings.reduce((s, b) => s + (b.entitlement?.outstanding ?? 0), 0),
       },
     });
