@@ -175,7 +175,9 @@ dashboardRouter.get(
       if (!trendMap[key]) continue;
       trendMap[key].bookings += 1;
       trendMap[key].dealValue += b.financials?.totalCost ?? 0;
-      trendMap[key].received += (b.financials ? b.financials.totalCost - b.financials.valueToBeCollected : 0) ?? 0;
+      trendMap[key].received += b.financials
+        ? b.financials.totalCost - b.financials.valueToBeCollected
+        : 0;
       trendMap[key].pending += b.financials?.valueToBeCollected ?? 0;
     }
     const collectionTrend = months.map((m) => trendMap[m]!);
@@ -417,7 +419,9 @@ dashboardRouter.get(
       if (!trendMap[key]) continue;
       trendMap[key].bookings += 1;
       trendMap[key].dealValue += b.financials?.totalCost ?? 0;
-      trendMap[key].received += (b.financials ? b.financials.totalCost - b.financials.valueToBeCollected : 0) ?? 0;
+      trendMap[key].received += b.financials
+        ? b.financials.totalCost - b.financials.valueToBeCollected
+        : 0;
       trendMap[key].pending += b.financials?.valueToBeCollected ?? 0;
     }
 
