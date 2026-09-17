@@ -92,7 +92,7 @@ partnerPortalRouter.get(
     });
     const kpis = bookings.reduce(
       (acc, b) => {
-        acc.bookingValue += b.financials?.totalDealValue ?? 0;
+        acc.bookingValue += b.financials?.totalCost ?? 0;
         acc.entitlement += b.entitlement?.entitlementAmount ?? 0;
         acc.received += b.entitlement?.received ?? 0;
         acc.outstanding += b.entitlement?.outstanding ?? 0;

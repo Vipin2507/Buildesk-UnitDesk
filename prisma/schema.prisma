@@ -195,15 +195,17 @@ model Customer {
 }
 
 model BookingFinancial {
-  id                  String  @id @default(cuid())
-  bookingId           String  @unique
-  booking             Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  totalDealValue      Float
-  dealValueWithoutGst Float
-  gst                 Float   @default(0)
-  discount            Float   @default(0)
-  receivedPayment     Float   @default(0)
-  pendingAmount       Float   @default(0)
+  id                    String  @id @default(cuid())
+  bookingId             String  @unique
+  booking               Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  agreement             Float   @default(0)
+  gst                   Float   @default(0)
+  otherCharges          Float   @default(0)
+  totalCost             Float
+  gstOnAgreement        Float   @default(0)
+  stampDutyRegistration Float   @default(0)
+  valueToBeCollected    Float   @default(0)
+  finance               Float   @default(0)
 }
 
 model ChannelPartner {

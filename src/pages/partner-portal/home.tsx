@@ -19,7 +19,7 @@ type Dash = {
     status: string;
     project: { name: string };
     unit: { unitNumber: string };
-    financials: { totalDealValue: number } | null;
+    financials: { totalCost: number } | null;
     entitlement: { entitlementAmount: number; received: number; outstanding: number } | null;
   }[];
 };
@@ -51,7 +51,7 @@ export function PartnerPortalHome() {
             { key: "no", header: "Booking", cell: (r) => r.bookingNumber },
             { key: "pr", header: "Project", cell: (r) => r.project.name },
             { key: "un", header: "Unit", cell: (r) => r.unit.unitNumber },
-            { key: "val", header: "Value", cell: (r) => inr(r.financials?.totalDealValue) },
+            { key: "val", header: "Value", cell: (r) => inr(r.financials?.totalCost) },
             { key: "out", header: "Outstanding", cell: (r) => inr(r.entitlement?.outstanding) },
             { key: "st", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
           ]}

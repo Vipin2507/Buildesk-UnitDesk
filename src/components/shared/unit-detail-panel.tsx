@@ -66,12 +66,14 @@ type UnitDetail = {
     status: string;
     customers: Array<{ name: string; mobile: string; email?: string | null; role: string }>;
     financials: {
-      totalDealValue: number;
-      dealValueWithoutGst: number;
+      agreement?: number;
       gst?: number;
-      discount?: number;
-      receivedPayment?: number;
-      pendingAmount?: number;
+      otherCharges?: number;
+      totalCost: number;
+      gstOnAgreement?: number;
+      stampDutyRegistration?: number;
+      valueToBeCollected?: number;
+      finance?: number;
     } | null;
   }>;
 };
@@ -324,12 +326,14 @@ export function UnitDetailPanel({
                 {tab === "financials" ? (
                   booking?.financials ? (
                     <div>
-                      <Row label="Total deal value" value={inr(booking.financials.totalDealValue)} />
-                      <Row label="Deal value without GST" value={inr(booking.financials.dealValueWithoutGst)} />
+                      <Row label="Agreement" value={inr(booking.financials.agreement)} />
                       <Row label="GST" value={inr(booking.financials.gst)} />
-                      <Row label="Discount" value={inr(booking.financials.discount)} />
-                      <Row label="Received payment" value={inr(booking.financials.receivedPayment)} />
-                      <Row label="Pending amount" value={inr(booking.financials.pendingAmount)} />
+                      <Row label="Other charges" value={inr(booking.financials.otherCharges)} />
+                      <Row label="Total cost" value={inr(booking.financials.totalCost)} />
+                      <Row label="GST on agreement" value={inr(booking.financials.gstOnAgreement)} />
+                      <Row label="Stamp duty registration" value={inr(booking.financials.stampDutyRegistration)} />
+                      <Row label="Value to be collected" value={inr(booking.financials.valueToBeCollected)} />
+                      <Row label="Finance" value={inr(booking.financials.finance)} />
                     </div>
                   ) : (
                     <EmptyState icon={FileText} title="No financials captured yet." />

@@ -58,11 +58,11 @@ export function ReportsPage() {
         <CardSoft padded={false}>
           {kind === "bookings" && (
             <DataTable
-              rows={(data?.data ?? []) as Array<{ id: string; bookingNumber: string; bookingDate: string; status: string; financials?: { totalDealValue: number } }>}
+              rows={(data?.data ?? []) as Array<{ id: string; bookingNumber: string; bookingDate: string; status: string; financials?: { totalCost: number } }>}
               columns={[
                 { key: "no", header: "Booking", cell: (r) => r.bookingNumber },
                 { key: "date", header: "Date", cell: (r) => formatDate(r.bookingDate) },
-                { key: "val", header: "Value", cell: (r) => inr(r.financials?.totalDealValue) },
+                { key: "val", header: "Value", cell: (r) => inr(r.financials?.totalCost) },
                 { key: "st", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
               ]}
             />

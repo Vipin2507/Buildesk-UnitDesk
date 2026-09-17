@@ -280,15 +280,17 @@ async function main() {
   ];
 
   for (const [i, unit] of bookable.slice(0, 36).entries()) {
-    const dealWithoutGst =
+    const agreement =
       unit.number.endsWith("06") || unit.number.endsWith("07") || unit.number.endsWith("08") ? 1_07_14_286 : 80_76_190;
-    const gst = Math.round(dealWithoutGst * 0.05);
-    const discount = 50000;
-    const totalDealValue = Math.max(0, dealWithoutGst + gst - discount);
-    const receivedPayment = Math.round(totalDealValue * 0.1);
-    const pendingAmount = Math.max(0, totalDealValue - receivedPayment);
+    const gst = Math.round(agreement * 0.05);
+    const otherCharges = 85000;
+    const gstOnAgreement = Math.round(agreement * 0.01);
+    const stampDutyRegistration = Math.round(agreement * 0.05) + 45000;
+    const totalCost = agreement + gst + otherCharges + gstOnAgreement + stampDutyRegistration;
+    const finance = Math.round(totalCost * 0.8);
+    const valueToBeCollected = Math.max(0, totalCost - finance);
     const partner = i % 3 === 0 ? partners[0] : i % 3 === 1 ? partners[1] : null;
-    const snap = partner ? computeEntitlement(pctRule, totalDealValue) : null;
+    const snap = partner ? computeEntitlement(pctRule, totalCost) : null;
     const date = new Date(2025, (i % 10) + 1, (i % 27) + 1);
     const buyer = names[i % names.length];
     const mail = `${slug(buyer)}${i >= names.length ? i : ""}@${DOMAIN}`;
@@ -315,12 +317,14 @@ async function main() {
         },
         financials: {
           create: {
-            totalDealValue,
-            dealValueWithoutGst: dealWithoutGst,
+            agreement,
             gst,
-            discount,
-            receivedPayment,
-            pendingAmount,
+            otherCharges,
+            totalCost,
+            gstOnAgreement,
+            stampDutyRegistration,
+            valueToBeCollected,
+            finance,
           },
         },
       },

@@ -43,12 +43,14 @@ function normalizeType(unitType?: string | null, configuration?: string | null) 
 }
 
 type Fin = {
-  totalDealValue: number;
-  dealValueWithoutGst: number;
+  agreement: number;
   gst: number;
-  discount: number;
-  receivedPayment: number;
-  pendingAmount: number;
+  otherCharges: number;
+  totalCost: number;
+  gstOnAgreement: number;
+  stampDutyRegistration: number;
+  valueToBeCollected: number;
+  finance: number;
 } | null;
 
 function sumFinancials(rows: { financials: Fin }[]) {
@@ -56,21 +58,25 @@ function sumFinancials(rows: { financials: Fin }[]) {
     (acc, b) => {
       const f = b.financials;
       if (!f) return acc;
-      acc.totalDealValue += f.totalDealValue ?? 0;
-      acc.dealValueWithoutGst += f.dealValueWithoutGst ?? 0;
+      acc.agreement += f.agreement ?? 0;
       acc.gst += f.gst ?? 0;
-      acc.discount += f.discount ?? 0;
-      acc.receivedPayment += f.receivedPayment ?? 0;
-      acc.pendingAmount += f.pendingAmount ?? 0;
+      acc.otherCharges += f.otherCharges ?? 0;
+      acc.totalCost += f.totalCost ?? 0;
+      acc.gstOnAgreement += f.gstOnAgreement ?? 0;
+      acc.stampDutyRegistration += f.stampDutyRegistration ?? 0;
+      acc.valueToBeCollected += f.valueToBeCollected ?? 0;
+      acc.finance += f.finance ?? 0;
       return acc;
     },
     {
-      totalDealValue: 0,
-      dealValueWithoutGst: 0,
+      agreement: 0,
       gst: 0,
-      discount: 0,
-      receivedPayment: 0,
-      pendingAmount: 0,
+      otherCharges: 0,
+      totalCost: 0,
+      gstOnAgreement: 0,
+      stampDutyRegistration: 0,
+      valueToBeCollected: 0,
+      finance: 0,
     },
   );
 }
@@ -150,11 +156,11 @@ dashboardRouter.get(
 
     const byStatus = (s: string) => units.filter((u) => u.status === s).length;
     const financials = sumFinancials(bookings);
-    const collectionPct = financials.totalDealValue
-      ? Math.round((financials.receivedPayment / financials.totalDealValue) * 1000) / 10
+    const collectionPct = financials.totalCost
+      ? Math.round(((financials.totalCost - financials.valueToBeCollected) / financials.totalCost) * 1000) / 10
       : 0;
-    const pendingPct = financials.totalDealValue
-      ? Math.round((financials.pendingAmount / financials.totalDealValue) * 1000) / 10
+    const pendingPct = financials.totalCost
+      ? Math.round((financials.valueToBeCollected / financials.totalCost) * 1000) / 10
       : 0;
 
     const months = lastNMonths(8);
@@ -168,9 +174,9 @@ dashboardRouter.get(
       const key = monthKey(b.bookingDate);
       if (!trendMap[key]) continue;
       trendMap[key].bookings += 1;
-      trendMap[key].dealValue += b.financials?.totalDealValue ?? 0;
-      trendMap[key].received += b.financials?.receivedPayment ?? 0;
-      trendMap[key].pending += b.financials?.pendingAmount ?? 0;
+      trendMap[key].dealValue += b.financials?.totalCost ?? 0;
+      trendMap[key].received += (b.financials ? b.financials.totalCost - b.financials.valueToBeCollected : 0) ?? 0;
+      trendMap[key].pending += b.financials?.valueToBeCollected ?? 0;
     }
     const collectionTrend = months.map((m) => trendMap[m]!);
 
@@ -245,11 +251,11 @@ dashboardRouter.get(
         sold: pUnits.filter((u) => u.status === "sold").length,
         booked: pUnits.filter((u) => u.status === "booked").length,
         hold: pUnits.filter((u) => u.status === "hold").length,
-        totalDealValue: fin.totalDealValue,
-        receivedPayment: fin.receivedPayment,
-        pendingAmount: fin.pendingAmount,
-        collectionPct: fin.totalDealValue
-          ? Math.round((fin.receivedPayment / fin.totalDealValue) * 1000) / 10
+        totalCost: fin.totalCost,
+        finance: fin.finance,
+        valueToBeCollected: fin.valueToBeCollected,
+        collectionPct: fin.totalCost
+          ? Math.round(((fin.totalCost - fin.valueToBeCollected) / fin.totalCost) * 1000) / 10
           : 0,
       };
     });
@@ -286,7 +292,7 @@ dashboardRouter.get(
         pendingPct,
         partnerOutstanding,
         bookingsThisMonth: thisMonthBookings.length,
-        bookingValueThisMonth: sumFinancials(thisMonthBookings).totalDealValue,
+        bookingValueThisMonth: sumFinancials(thisMonthBookings).totalCost,
       },
       status: [
         { name: "Available", value: byStatus("available"), key: "available" },
@@ -308,17 +314,17 @@ dashboardRouter.get(
         project: b.project.name,
         unit: b.unit.unitNumber,
         customer: b.customers[0]?.name ?? "—",
-        totalDealValue: b.financials?.totalDealValue ?? 0,
-        receivedPayment: b.financials?.receivedPayment ?? 0,
-        pendingAmount: b.financials?.pendingAmount ?? 0,
+        totalCost: b.financials?.totalCost ?? 0,
+        finance: b.financials?.finance ?? 0,
+        valueToBeCollected: b.financials?.valueToBeCollected ?? 0,
       })),
       glance: {
         financial: financials,
         sales: {
           totalBookings: bookings.length,
           thisMonth: thisMonthBookings.length,
-          dealValue: financials.totalDealValue,
-          avgDeal: bookings.length ? Math.round(financials.totalDealValue / bookings.length) : 0,
+          dealValue: financials.totalCost,
+          avgDeal: bookings.length ? Math.round(financials.totalCost / bookings.length) : 0,
         },
         inventory: {
           available: byStatus("available"),
@@ -392,11 +398,11 @@ dashboardRouter.get(
 
     const byStatus = (s: string) => units.filter((u) => u.status === s).length;
     const financials = sumFinancials(bookings);
-    const collectionPct = financials.totalDealValue
-      ? Math.round((financials.receivedPayment / financials.totalDealValue) * 1000) / 10
+    const collectionPct = financials.totalCost
+      ? Math.round(((financials.totalCost - financials.valueToBeCollected) / financials.totalCost) * 1000) / 10
       : 0;
-    const pendingPct = financials.totalDealValue
-      ? Math.round((financials.pendingAmount / financials.totalDealValue) * 1000) / 10
+    const pendingPct = financials.totalCost
+      ? Math.round((financials.valueToBeCollected / financials.totalCost) * 1000) / 10
       : 0;
 
     const months = lastNMonths(8);
@@ -410,9 +416,9 @@ dashboardRouter.get(
       const key = monthKey(b.bookingDate);
       if (!trendMap[key]) continue;
       trendMap[key].bookings += 1;
-      trendMap[key].dealValue += b.financials?.totalDealValue ?? 0;
-      trendMap[key].received += b.financials?.receivedPayment ?? 0;
-      trendMap[key].pending += b.financials?.pendingAmount ?? 0;
+      trendMap[key].dealValue += b.financials?.totalCost ?? 0;
+      trendMap[key].received += (b.financials ? b.financials.totalCost - b.financials.valueToBeCollected : 0) ?? 0;
+      trendMap[key].pending += b.financials?.valueToBeCollected ?? 0;
     }
 
     const typeMap = new Map<
@@ -477,7 +483,7 @@ dashboardRouter.get(
         hold: byStatus("hold"),
         blocked: byStatus("blocked"),
         customers: bookings.reduce((s, b) => s + b.customers.length, 0),
-        bookingValue: financials.totalDealValue,
+        bookingValue: financials.totalCost,
         partnerOutstanding: bookings.reduce((s, b) => s + (b.entitlement?.outstanding ?? 0), 0),
         ...financials,
         collectionPct,
@@ -524,17 +530,17 @@ dashboardRouter.get(
         status: b.status,
         unit: b.unit.unitNumber,
         customer: b.customers[0]?.name ?? "—",
-        totalDealValue: b.financials?.totalDealValue ?? 0,
-        receivedPayment: b.financials?.receivedPayment ?? 0,
-        pendingAmount: b.financials?.pendingAmount ?? 0,
+        totalCost: b.financials?.totalCost ?? 0,
+        finance: b.financials?.finance ?? 0,
+        valueToBeCollected: b.financials?.valueToBeCollected ?? 0,
       })),
       glance: {
         financial: financials,
         sales: {
           totalBookings: bookings.length,
           thisMonth: thisMonthBookings.length,
-          dealValue: financials.totalDealValue,
-          avgDeal: bookings.length ? Math.round(financials.totalDealValue / bookings.length) : 0,
+          dealValue: financials.totalCost,
+          avgDeal: bookings.length ? Math.round(financials.totalCost / bookings.length) : 0,
         },
         inventory: {
           available: byStatus("available"),

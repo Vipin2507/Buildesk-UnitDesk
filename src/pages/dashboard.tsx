@@ -54,12 +54,12 @@ type Dash = {
     hold: number;
     blocked: number;
     customers: number;
-    totalDealValue: number;
-    dealValueWithoutGst: number;
+    totalCost: number;
+    agreement: number;
     gst: number;
-    discount: number;
-    receivedPayment: number;
-    pendingAmount: number;
+    otherCharges: number;
+    finance: number;
+    valueToBeCollected: number;
     collectionPct: number;
     pendingPct: number;
     partnerOutstanding: number;
@@ -100,9 +100,9 @@ type Dash = {
     sold: number;
     booked: number;
     hold: number;
-    totalDealValue: number;
-    receivedPayment: number;
-    pendingAmount: number;
+    totalCost: number;
+    finance: number;
+    valueToBeCollected: number;
     collectionPct: number;
   }>;
   recentBookings: Array<{
@@ -113,18 +113,20 @@ type Dash = {
     project: string;
     unit: string;
     customer: string;
-    totalDealValue: number;
-    receivedPayment: number;
-    pendingAmount: number;
+    totalCost: number;
+    finance: number;
+    valueToBeCollected: number;
   }>;
   glance: {
     financial: {
-      totalDealValue: number;
-      dealValueWithoutGst: number;
+      totalCost: number;
+      agreement: number;
       gst: number;
-      discount: number;
-      receivedPayment: number;
-      pendingAmount: number;
+      otherCharges: number;
+      gstOnAgreement: number;
+      stampDutyRegistration: number;
+      finance: number;
+      valueToBeCollected: number;
     };
     sales: { totalBookings: number; thisMonth: number; dealValue: number; avgDeal: number };
     inventory: { available: number; booked: number; sold: number; hold: number; blocked: number };
@@ -380,17 +382,17 @@ export function DashboardPage() {
           onClick={() => navigate("/customers")}
         />
         <MetricCard
-          label="Total deal value"
-          value={inr(k?.totalDealValue, true)}
-          hint={`Without GST ${inr(k?.dealValueWithoutGst, true)}`}
+          label="Total cost"
+          value={inr(k?.totalCost, true)}
+          hint={`Agreement ${inr(k?.agreement, true)}`}
           icon={CircleDollarSign}
           delay={staggerDelay(3)}
           onClick={() => navigate("/bookings")}
-          chips={<Chip tone="success">GST {inr(k?.gst, true)}</Chip>}
+          chips={<Chip tone="success">Other {inr(k?.otherCharges, true)}</Chip>}
         />
         <MetricCard
-          label="Received payment"
-          value={inr(k?.receivedPayment, true)}
+          label="Finance"
+          value={inr(k?.finance, true)}
           hint={`${k?.collectionPct ?? 0}% collected`}
           icon={HandCoins}
           tone="success"
@@ -399,8 +401,8 @@ export function DashboardPage() {
           chips={<Chip tone="success">{k?.collectionPct ?? 0}%</Chip>}
         />
         <MetricCard
-          label="Pending amount"
-          value={inr(k?.pendingAmount, true)}
+          label="Value to be collected"
+          value={inr(k?.valueToBeCollected, true)}
           hint={`Partner due ${inr(k?.partnerOutstanding, true)}`}
           icon={Wallet}
           tone="warning"
@@ -572,7 +574,7 @@ export function DashboardPage() {
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar yAxisId="left" dataKey="received" name="Received" fill={colors[0]} radius={[4, 4, 0, 0]} />
                 <Bar yAxisId="left" dataKey="pending" name="Pending" fill={colors[3]} radius={[4, 4, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="dealValue" name="Deal value" stroke={colors[1]} strokeWidth={2} dot={false} />
+                <Line yAxisId="right" type="monotone" dataKey="dealValue" name="Total cost" stroke={colors[1]} strokeWidth={2} dot={false} />
                 <Area yAxisId="right" type="monotone" dataKey="bookings" name="Bookings" fill={colors[2]} fillOpacity={0.08} stroke={colors[2]} strokeWidth={1.5} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -651,10 +653,10 @@ export function DashboardPage() {
                   </span>
                 ),
               },
-              { key: "deal", header: "Deal value", hideOnMobile: true, cell: (r) => inr(r.totalDealValue, true) },
+              { key: "deal", header: "Total cost", hideOnMobile: true, cell: (r) => inr(r.totalCost, true) },
               {
                 key: "coll",
-                header: "Collected",
+                header: "Finance",
                 cell: (r) => <Chip tone="success">{r.collectionPct}%</Chip>,
               },
             ]}
@@ -695,12 +697,12 @@ export function DashboardPage() {
               },
               { key: "customer", header: "Customer", cell: (r) => r.customer },
               { key: "date", header: "Date", hideOnMobile: true, cell: (r) => formatDate(r.bookingDate) },
-              { key: "deal", header: "Deal", cell: (r) => inr(r.totalDealValue, true) },
+              { key: "deal", header: "Total cost", cell: (r) => inr(r.totalCost, true) },
               {
                 key: "pay",
-                header: "Received",
+                header: "Finance",
                 hideOnMobile: true,
-                cell: (r) => inr(r.receivedPayment, true),
+                cell: (r) => inr(r.finance, true),
               },
               { key: "st", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
             ]}
@@ -718,12 +720,14 @@ export function DashboardPage() {
           >
             <CardSoft>
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Financial overview</p>
-              <GlanceRow label="Total deal value" value={inr(data?.glance.financial.totalDealValue)} accent />
-              <GlanceRow label="Deal value without GST" value={inr(data?.glance.financial.dealValueWithoutGst)} />
+              <GlanceRow label="Total cost" value={inr(data?.glance.financial.totalCost)} accent />
+              <GlanceRow label="Agreement" value={inr(data?.glance.financial.agreement)} />
               <GlanceRow label="GST" value={inr(data?.glance.financial.gst)} />
-              <GlanceRow label="Discount" value={inr(data?.glance.financial.discount)} />
-              <GlanceRow label="Received payment" value={inr(data?.glance.financial.receivedPayment)} />
-              <GlanceRow label="Pending amount" value={inr(data?.glance.financial.pendingAmount)} />
+              <GlanceRow label="Other charges" value={inr(data?.glance.financial.otherCharges)} />
+              <GlanceRow label="GST on agreement" value={inr(data?.glance.financial.gstOnAgreement)} />
+              <GlanceRow label="Stamp duty registration" value={inr(data?.glance.financial.stampDutyRegistration)} />
+              <GlanceRow label="Value to be collected" value={inr(data?.glance.financial.valueToBeCollected)} />
+              <GlanceRow label="Finance" value={inr(data?.glance.financial.finance)} />
             </CardSoft>
           </motion.div>
           <motion.div
@@ -735,7 +739,7 @@ export function DashboardPage() {
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Sales overview</p>
               <GlanceRow label="Total bookings" value={String(data?.glance.sales.totalBookings ?? 0)} />
               <GlanceRow label="This month" value={String(data?.glance.sales.thisMonth ?? 0)} accent />
-              <GlanceRow label="Deal value" value={inr(data?.glance.sales.dealValue)} />
+              <GlanceRow label="Total cost" value={inr(data?.glance.sales.dealValue)} />
               <GlanceRow label="Avg deal" value={inr(data?.glance.sales.avgDeal)} />
               <GlanceRow label="Booking value MTD" value={inr(k?.bookingValueThisMonth)} />
             </CardSoft>

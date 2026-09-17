@@ -25,12 +25,14 @@ const customerSchema = z.object({
 });
 
 const financialSchema = z.object({
-  totalDealValue: z.number(),
-  dealValueWithoutGst: z.number(),
+  agreement: z.number().optional(),
   gst: z.number().optional(),
-  discount: z.number().optional(),
-  receivedPayment: z.number().optional(),
-  pendingAmount: z.number().optional(),
+  otherCharges: z.number().optional(),
+  totalCost: z.number(),
+  gstOnAgreement: z.number().optional(),
+  stampDutyRegistration: z.number().optional(),
+  valueToBeCollected: z.number().optional(),
+  finance: z.number().optional(),
 });
 
 const bookingSchema = z.object({
@@ -150,7 +152,7 @@ bookingsRouter.post(
         if (!rule) throw new HttpError(422, "No active commission rule for this project", {
           channelPartnerId: ["Configure a commission rule before attaching a partner"],
         });
-        const snap = computeEntitlement(rule, body.financials.totalDealValue);
+        const snap = computeEntitlement(rule, body.financials.totalCost);
         await tx.partnerEntitlement.create({
           data: {
             bookingId: booking.id,
@@ -171,7 +173,7 @@ bookingsRouter.post(
       await issueDocument(tx, {
         bookingId: booking.id,
         kind: "invoice",
-        amount: body.financials.totalDealValue,
+        amount: body.financials.totalCost,
         tax: body.financials.gst ?? 0,
         notes: `Agreement invoice for ${full.bookingNumber}`,
       });
@@ -289,7 +291,7 @@ bookingsRouter.post(
     const created = await issueDocument(prisma, {
       bookingId: booking.id,
       kind: body.kind,
-      amount: body.amount ?? booking.financials?.totalDealValue ?? 0,
+      amount: body.amount ?? booking.financials?.totalCost ?? 0,
       tax: booking.financials?.gst ?? 0,
       paymentId: body.paymentId,
     });

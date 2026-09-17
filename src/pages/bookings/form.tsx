@@ -11,16 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, ApiError, type ListResponse } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
-import { cn } from "@/lib/cn";
 import { inr } from "@/lib/format";
-
-const STEPS = [
-  { id: 0, label: "Booking" },
-  { id: 1, label: "Customer" },
-  { id: 2, label: "Financials" },
-  { id: 3, label: "Partner" },
-  { id: 4, label: "Documents" },
-];
 
 type Customer = {
   role: "primary" | "co_applicant" | "nominee";
@@ -30,11 +21,21 @@ type Customer = {
   pan: string;
 };
 
+const MONEY_FIELDS = [
+  ["agreement", "Agreement"],
+  ["gst", "GST"],
+  ["otherCharges", "Other charges"],
+  ["totalCost", "Total cost"],
+  ["gstOnAgreement", "GST on agreement"],
+  ["stampDutyRegistration", "Stamp duty registration"],
+  ["valueToBeCollected", "Value to be collected"],
+  ["finance", "Finance"],
+] as const;
+
 export function BookingFormPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [step, setStep] = useState(0);
   const [projectId, setProjectId] = useState(params.get("projectId") ?? "");
   const [unitId, setUnitId] = useState(params.get("unitId") ?? "");
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().slice(0, 10));
@@ -43,12 +44,14 @@ export function BookingFormPage() {
     { role: "primary", name: "", mobile: "", email: "", pan: "" },
   ]);
   const [financials, setFinancials] = useState({
-    totalDealValue: 0,
-    dealValueWithoutGst: 0,
+    agreement: 0,
     gst: 0,
-    discount: 0,
-    receivedPayment: 0,
-    pendingAmount: 0,
+    otherCharges: 0,
+    totalCost: 0,
+    gstOnAgreement: 0,
+    stampDutyRegistration: 0,
+    valueToBeCollected: 0,
+    finance: 0,
   });
   const [pendingFiles, setPendingFiles] = useState<{ file: File; category: string }[]>([]);
   const [partnerId, setPartnerId] = useState("");
@@ -83,7 +86,7 @@ export function BookingFormPage() {
   const activeRule = rules?.data.find((r) => r.active);
   const partnerShare =
     activeRule?.type === "percentage"
-      ? (financials.totalDealValue * (activeRule.value ?? 0)) / 100
+      ? (financials.totalCost * (activeRule.value ?? 0)) / 100
       : activeRule?.type === "flat_per_unit"
         ? (activeRule.value ?? 0)
         : 0;
@@ -91,18 +94,44 @@ export function BookingFormPage() {
   function patchFinancials(patch: Partial<typeof financials>) {
     setFinancials((f) => {
       const next = { ...f, ...patch };
-      if (patch.totalDealValue !== undefined || patch.receivedPayment !== undefined) {
-        next.pendingAmount = Math.max(0, next.totalDealValue - next.receivedPayment);
-      }
-      if (patch.dealValueWithoutGst !== undefined || patch.gst !== undefined || patch.discount !== undefined) {
-        if (patch.totalDealValue === undefined) {
-          next.totalDealValue = Math.max(0, next.dealValueWithoutGst + next.gst - next.discount);
-          next.pendingAmount = Math.max(0, next.totalDealValue - next.receivedPayment);
+      if (
+        patch.agreement !== undefined ||
+        patch.gst !== undefined ||
+        patch.otherCharges !== undefined ||
+        patch.gstOnAgreement !== undefined ||
+        patch.stampDutyRegistration !== undefined
+      ) {
+        if (patch.totalCost === undefined) {
+          next.totalCost = Math.max(
+            0,
+            next.agreement + next.gst + next.otherCharges + next.gstOnAgreement + next.stampDutyRegistration,
+          );
         }
+      }
+      if (patch.totalCost !== undefined || patch.finance !== undefined) {
+        if (patch.valueToBeCollected === undefined) {
+          next.valueToBeCollected = Math.max(0, next.totalCost - next.finance);
+        }
+      }
+      if (
+        (patch.agreement !== undefined ||
+          patch.gst !== undefined ||
+          patch.otherCharges !== undefined ||
+          patch.gstOnAgreement !== undefined ||
+          patch.stampDutyRegistration !== undefined) &&
+        patch.valueToBeCollected === undefined
+      ) {
+        next.valueToBeCollected = Math.max(0, next.totalCost - next.finance);
       }
       return next;
     });
   }
+
+  const canSave = useMemo(
+    () =>
+      Boolean(projectId && unitId && customers[0]?.name && customers[0]?.mobile && financials.totalCost > 0),
+    [projectId, unitId, customers, financials.totalCost],
+  );
 
   const save = useMutation({
     mutationFn: async () => {
@@ -114,12 +143,14 @@ export function BookingFormPage() {
         status,
         customers: customers.map((c) => ({ ...c, email: c.email || null })),
         financials: {
-          totalDealValue: financials.totalDealValue,
-          dealValueWithoutGst: financials.dealValueWithoutGst,
+          agreement: financials.agreement,
           gst: financials.gst,
-          discount: financials.discount,
-          receivedPayment: financials.receivedPayment,
-          pendingAmount: financials.pendingAmount,
+          otherCharges: financials.otherCharges,
+          totalCost: financials.totalCost,
+          gstOnAgreement: financials.gstOnAgreement,
+          stampDutyRegistration: financials.stampDutyRegistration,
+          valueToBeCollected: financials.valueToBeCollected,
+          finance: financials.finance,
         },
       });
       for (const item of pendingFiles) {
@@ -145,38 +176,22 @@ export function BookingFormPage() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Save failed"),
   });
 
-  const canNext = useMemo(() => {
-    if (step === 0) return projectId && unitId;
-    if (step === 1) return customers[0]?.name && customers[0]?.mobile;
-    if (step === 2) return financials.totalDealValue > 0;
-    return true;
-  }, [step, projectId, unitId, customers, financials.totalDealValue]);
-
   return (
     <PageWrap>
-      <PageHeader title="Create booking" subtitle="Booking → customer → financials → partner share" />
-      <div className="flex gap-1 overflow-x-auto scrollbar-none">
-        {STEPS.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => setStep(s.id)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
-              step === s.id ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground",
-            )}
-          >
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-card/20 text-[10px]">{s.id + 1}</span>
-            {s.label}
-          </button>
-        ))}
-      </div>
+      <PageHeader title="Create booking" subtitle="Single form · contact, agreement and charges" />
 
-      <CardSoft className="max-w-3xl space-y-2.5">
-        {step === 0 && (
+      <div className="mx-auto max-w-4xl space-y-3">
+        <CardSoft className="space-y-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Booking</p>
           <div className="grid gap-2.5 sm:grid-cols-2">
             <Field label="Project">
-              <Select value={projectId} onValueChange={setProjectId}>
+              <Select
+                value={projectId}
+                onValueChange={(v) => {
+                  setProjectId(v);
+                  setUnitId("");
+                }}
+              >
                 <SelectTrigger className="h-10"><SelectValue placeholder="Select project" /></SelectTrigger>
                 <SelectContent>
                   {(projects?.data ?? []).map((p) => (
@@ -186,26 +201,32 @@ export function BookingFormPage() {
               </Select>
             </Field>
             <Field label="Unit">
-              <Select value={unitId} onValueChange={(v) => {
-                setUnitId(v);
-                const u = units?.data.find((x) => x.id === v);
-                if (u?.basePrice != null) {
-                  const base = u.basePrice ?? 0;
-                  const gst = Math.round(base * 0.05);
-                  const discount = 0;
-                  const dealWithoutGst = base;
-                  const total = Math.max(0, dealWithoutGst + gst - discount);
-                  const received = Math.round(total * 0.1);
-                  setFinancials({
-                    dealValueWithoutGst: dealWithoutGst,
-                    gst,
-                    discount,
-                    totalDealValue: total,
-                    receivedPayment: received,
-                    pendingAmount: Math.max(0, total - received),
-                  });
-                }
-              }}>
+              <Select
+                value={unitId}
+                onValueChange={(v) => {
+                  setUnitId(v);
+                  const u = units?.data.find((x) => x.id === v);
+                  if (u?.basePrice != null) {
+                    const agreement = u.basePrice ?? 0;
+                    const gst = Math.round(agreement * 0.05);
+                    const otherCharges = 85000;
+                    const gstOnAgreement = Math.round(agreement * 0.01);
+                    const stampDutyRegistration = Math.round(agreement * 0.05) + 45000;
+                    const totalCost = agreement + gst + otherCharges + gstOnAgreement + stampDutyRegistration;
+                    const finance = Math.round(totalCost * 0.8);
+                    setFinancials({
+                      agreement,
+                      gst,
+                      otherCharges,
+                      totalCost,
+                      gstOnAgreement,
+                      stampDutyRegistration,
+                      finance,
+                      valueToBeCollected: Math.max(0, totalCost - finance),
+                    });
+                  }
+                }}
+              >
                 <SelectTrigger className="h-10"><SelectValue placeholder="Select unit" /></SelectTrigger>
                 <SelectContent>
                   {(units?.data ?? []).map((u) => (
@@ -227,54 +248,104 @@ export function BookingFormPage() {
                 </SelectContent>
               </Select>
             </Field>
-            {selectedUnit ? <p className="sm:col-span-2 text-xs text-muted-foreground">Selected {selectedUnit.unitNumber}</p> : null}
+            {selectedUnit ? (
+              <p className="sm:col-span-2 text-xs text-muted-foreground">Selected {selectedUnit.unitNumber}</p>
+            ) : null}
           </div>
-        )}
+        </CardSoft>
 
-        {step === 1 && (
-          <div className="space-y-2">
-            {customers.map((c, i) => (
-              <div key={i} className="grid gap-2 rounded-lg border p-2.5 sm:grid-cols-2">
-                <p className="sm:col-span-2 text-[11px] font-semibold uppercase text-muted-foreground">
-                  {c.role.replace("_", " ")}
-                </p>
-                <Field label="Name">
-                  <Input className="h-8" value={c.name} onChange={(e) => setCustomers((arr) => arr.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} />
-                </Field>
-                <Field label="Mobile">
-                  <Input className="h-8" value={c.mobile} onChange={(e) => setCustomers((arr) => arr.map((x, idx) => idx === i ? { ...x, mobile: e.target.value } : x))} />
-                </Field>
-                <Field label="Email">
-                  <Input className="h-8" value={c.email} onChange={(e) => setCustomers((arr) => arr.map((x, idx) => idx === i ? { ...x, email: e.target.value } : x))} />
-                </Field>
-                <Field label="PAN">
-                  <Input className="h-8" value={c.pan} onChange={(e) => setCustomers((arr) => arr.map((x, idx) => idx === i ? { ...x, pan: e.target.value } : x))} />
-                </Field>
-              </div>
-            ))}
+        <CardSoft className="space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Contact details</p>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setCustomers((c) => [...c, { role: "co_applicant", name: "", mobile: "", email: "", pan: "" }])}
+              onClick={() =>
+                setCustomers((c) => [...c, { role: "co_applicant", name: "", mobile: "", email: "", pan: "" }])
+              }
             >
-              Add customer
+              Add contact
             </Button>
           </div>
-        )}
+          {customers.map((c, i) => (
+            <div key={i} className="grid gap-2 rounded-lg border p-2.5 sm:grid-cols-2">
+              <div className="sm:col-span-2 flex items-center justify-between gap-2">
+                <Field label="Role">
+                  <Select
+                    value={c.role}
+                    onValueChange={(v) =>
+                      setCustomers((arr) =>
+                        arr.map((x, idx) =>
+                          idx === i ? { ...x, role: v as Customer["role"] } : x,
+                        ),
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="primary">Primary</SelectItem>
+                      <SelectItem value="co_applicant">Co-applicant</SelectItem>
+                      <SelectItem value="nominee">Nominee</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {customers.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    onClick={() => setCustomers((arr) => arr.filter((_, idx) => idx !== i))}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+              <Field label="Name">
+                <Input
+                  className="h-8"
+                  value={c.name}
+                  onChange={(e) =>
+                    setCustomers((arr) => arr.map((x, idx) => (idx === i ? { ...x, name: e.target.value } : x)))
+                  }
+                />
+              </Field>
+              <Field label="Mobile">
+                <Input
+                  className="h-8"
+                  value={c.mobile}
+                  onChange={(e) =>
+                    setCustomers((arr) => arr.map((x, idx) => (idx === i ? { ...x, mobile: e.target.value } : x)))
+                  }
+                />
+              </Field>
+              <Field label="Email">
+                <Input
+                  className="h-8"
+                  value={c.email}
+                  onChange={(e) =>
+                    setCustomers((arr) => arr.map((x, idx) => (idx === i ? { ...x, email: e.target.value } : x)))
+                  }
+                />
+              </Field>
+              <Field label="PAN">
+                <Input
+                  className="h-8"
+                  value={c.pan}
+                  onChange={(e) =>
+                    setCustomers((arr) => arr.map((x, idx) => (idx === i ? { ...x, pan: e.target.value } : x)))
+                  }
+                />
+              </Field>
+            </div>
+          ))}
+        </CardSoft>
 
-        {step === 2 && (
+        <CardSoft className="space-y-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Financials</p>
           <div className="grid gap-2.5 sm:grid-cols-2">
-            {(
-              [
-                ["totalDealValue", "Total deal value"],
-                ["dealValueWithoutGst", "Deal value without GST"],
-                ["gst", "GST"],
-                ["discount", "Discount"],
-                ["receivedPayment", "Received payment"],
-                ["pendingAmount", "Pending amount"],
-              ] as const
-            ).map(([k, label]) => (
+            {MONEY_FIELDS.map(([k, label]) => (
               <Field key={k} label={label}>
                 <Input
                   className="h-8"
@@ -284,77 +355,72 @@ export function BookingFormPage() {
                 />
               </Field>
             ))}
-            <p className="sm:col-span-2 text-sm">
-              Total deal <span className="font-semibold tabular-nums">{inr(financials.totalDealValue)}</span>
-              {" · "}Pending <span className="font-semibold tabular-nums">{inr(financials.pendingAmount)}</span>
-            </p>
           </div>
-        )}
+          <p className="text-sm">
+            Total cost <span className="font-semibold tabular-nums">{inr(financials.totalCost)}</span>
+            {" · "}To collect{" "}
+            <span className="font-semibold tabular-nums">{inr(financials.valueToBeCollected)}</span>
+            {" · "}Finance <span className="font-semibold tabular-nums">{inr(financials.finance)}</span>
+          </p>
+        </CardSoft>
 
-        {step === 3 && (
-          <div className="space-y-2.5">
-            <Field label="Channel partner">
-              <Select value={partnerId || "none"} onValueChange={(v) => setPartnerId(v === "none" ? "" : v)}>
-                <SelectTrigger className="h-10"><SelectValue placeholder="None" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {(partners?.data ?? []).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <p className="text-xs text-muted-foreground">
-              Active rule snapshots at save time
-              {activeRule?.type === "percentage" ? ` · ${activeRule.value}%` : activeRule?.type === "flat_per_unit" ? ` · flat ${inr(activeRule.value)}` : " · slab"}
-              {partnerId ? ` · estimated share ${inr(partnerShare)}` : ""}
-            </p>
-          </div>
-        )}
+        <CardSoft className="space-y-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Partner & documents</p>
+          <Field label="Channel partner">
+            <Select value={partnerId || "none"} onValueChange={(v) => setPartnerId(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-10"><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {(partners?.data ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            Active rule snapshots at save
+            {activeRule?.type === "percentage"
+              ? ` · ${activeRule.value}%`
+              : activeRule?.type === "flat_per_unit"
+                ? ` · flat ${inr(activeRule.value)}`
+                : " · slab"}
+            {partnerId ? ` · estimated share ${inr(partnerShare)}` : ""}
+          </p>
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs">
+            <input
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setPendingFiles((arr) => [...arr, { file, category: "kyc" }]);
+                e.target.value = "";
+              }}
+            />
+            Add KYC / agreement file
+          </label>
+          {pendingFiles.map((item, i) => (
+            <div key={item.file.name + i} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-xs">
+              <span>{item.file.name}</span>
+              <button
+                type="button"
+                className="text-muted-foreground"
+                onClick={() => setPendingFiles((arr) => arr.filter((_, idx) => idx !== i))}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </CardSoft>
 
-        {step === 4 && (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">
-              Attach KYC now; files upload when the booking is saved.
-            </p>
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs">
-              <input
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setPendingFiles((arr) => [...arr, { file, category: "kyc" }]);
-                  e.target.value = "";
-                }}
-              />
-              Add KYC / agreement file
-            </label>
-            {pendingFiles.map((item, i) => (
-              <div key={item.file.name + i} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-xs">
-                <span>{item.file.name}</span>
-                <button type="button" className="text-muted-foreground" onClick={() => setPendingFiles((arr) => arr.filter((_, idx) => idx !== i))}>
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex justify-between pt-1">
-          <Button type="button" variant="outline" size="sm" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
-            Previous
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => navigate(-1)}>
+            Cancel
           </Button>
-          {step < 4 ? (
-            <Button type="button" size="sm" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
-              Next
-            </Button>
-          ) : (
-            <Button type="button" size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
-              Save booking
-            </Button>
-          )}
+          <Button type="button" size="sm" disabled={!canSave || save.isPending} onClick={() => save.mutate()}>
+            {save.isPending ? "Saving…" : "Save booking"}
+          </Button>
         </div>
-      </CardSoft>
+      </div>
     </PageWrap>
   );
 }

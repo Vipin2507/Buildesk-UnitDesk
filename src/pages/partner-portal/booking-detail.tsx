@@ -17,7 +17,7 @@ type Booking = {
   project: { name: string };
   unit: { unitNumber: string };
   customers: { id: string; name: string; mobile: string; role: string }[];
-  financials: { totalDealValue: number; dealValueWithoutGst: number } | null;
+  financials: { totalCost: number; agreement: number } | null;
   entitlement: { entitlementPercent: number | null; entitlementAmount: number; received: number; outstanding: number } | null;
   schedules: { id: string; name: string; dueDate: string; amount: number; received: number; outstanding: number; status: string }[];
   invoices: { id: string; number: string; kind: string; amount: number; issuedAt: string }[];

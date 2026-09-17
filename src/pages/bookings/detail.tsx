@@ -31,12 +31,14 @@ type Booking = {
   project: { name: string };
   customers: { id: string; role: string; name: string; mobile: string; email: string | null }[];
   financials: {
-    totalDealValue: number;
-    dealValueWithoutGst: number;
+    agreement: number;
     gst: number;
-    discount: number;
-    receivedPayment: number;
-    pendingAmount: number;
+    otherCharges: number;
+    totalCost: number;
+    gstOnAgreement: number;
+    stampDutyRegistration: number;
+    valueToBeCollected: number;
+    finance: number;
   } | null;
   entitlement: {
     entitlementPercent: number | null;
@@ -139,18 +141,22 @@ export function BookingDetailPage() {
         <CardSoft className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Financial details</p>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <span className="text-muted-foreground">Total deal value</span>
-            <span className="text-right font-semibold tabular-nums">{inr(data?.financials?.totalDealValue)}</span>
-            <span className="text-muted-foreground">Deal value without GST</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.dealValueWithoutGst)}</span>
+            <span className="text-muted-foreground">Agreement</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.agreement)}</span>
             <span className="text-muted-foreground">GST</span>
             <span className="text-right tabular-nums">{inr(data?.financials?.gst)}</span>
-            <span className="text-muted-foreground">Discount</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.discount)}</span>
-            <span className="text-muted-foreground">Received payment</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.receivedPayment)}</span>
-            <span className="text-muted-foreground">Pending amount</span>
-            <span className="text-right tabular-nums">{inr(data?.financials?.pendingAmount)}</span>
+            <span className="text-muted-foreground">Other charges</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.otherCharges)}</span>
+            <span className="text-muted-foreground">Total cost</span>
+            <span className="text-right font-semibold tabular-nums">{inr(data?.financials?.totalCost)}</span>
+            <span className="text-muted-foreground">GST on agreement</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.gstOnAgreement)}</span>
+            <span className="text-muted-foreground">Stamp duty registration</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.stampDutyRegistration)}</span>
+            <span className="text-muted-foreground">Value to be collected</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.valueToBeCollected)}</span>
+            <span className="text-muted-foreground">Finance</span>
+            <span className="text-right tabular-nums">{inr(data?.financials?.finance)}</span>
           </div>
         </CardSoft>
       </div>

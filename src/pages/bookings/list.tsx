@@ -22,7 +22,7 @@ type Booking = {
   unit: { unitNumber: string };
   project: { name: string };
   customers: { name: string; role: string }[];
-  financials: { totalDealValue: number } | null;
+  financials: { totalCost: number } | null;
   channelPartner: { name: string } | null;
 };
 
@@ -68,7 +68,7 @@ export function BookingsListPage() {
           { key: "unit", header: "Unit", cell: (r) => r.unit.unitNumber },
           { key: "project", header: "Project", cell: (r) => r.project.name },
           { key: "customer", header: "Customer", cell: (r) => r.customers.find((c) => c.role === "primary")?.name ?? "—" },
-          { key: "value", header: "Value", cell: (r) => inr(r.financials?.totalDealValue) },
+          { key: "value", header: "Value", cell: (r) => inr(r.financials?.totalCost) },
           { key: "status", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
         ]}
       />

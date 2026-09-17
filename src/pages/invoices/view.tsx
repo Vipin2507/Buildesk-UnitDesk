@@ -22,7 +22,7 @@ type Invoice = {
     project: { name: string; company: { name: string; gst: string | null; address: string | null } };
     unit: { unitNumber: string };
     customers: { name: string; mobile: string; role: string }[];
-    financials: { totalDealValue: number; gst: number } | null;
+    financials: { totalCost: number; gst: number } | null;
   };
 };
 

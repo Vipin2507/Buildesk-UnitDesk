@@ -13,11 +13,17 @@ export async function generateSchedules(
   booking: {
     id: string;
     bookingDate: Date;
-    financials: { totalDealValue: number; receivedPayment: number } | null;
+    financials: { totalCost: number; valueToBeCollected: number; finance: number } | null;
   },
 ) {
-  const total = booking.financials?.totalDealValue ?? 0;
-  const bookingAmt = booking.financials?.receivedPayment || round2(total * 0.2);
+  const total = booking.financials?.totalCost ?? 0;
+  const finance = booking.financials?.finance ?? 0;
+  const bookingAmt =
+    finance > 0
+      ? round2(Math.max(0, total - finance))
+      : booking.financials?.valueToBeCollected
+        ? round2(Math.min(booking.financials.valueToBeCollected, total * 0.2))
+        : round2(total * 0.2);
   const rest = Math.max(0, round2(total - bookingAmt));
   const thirds = round2(rest / 3);
   const last = round2(rest - thirds * 2);
