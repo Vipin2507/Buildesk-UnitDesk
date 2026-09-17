@@ -10,7 +10,7 @@ import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
 import { audit } from "../lib/audit.ts";
 import { dispatchReminder, notify } from "../lib/notify.ts";
-import { applyCustomerPayment } from "../lib/schedule.ts";
+import { recomputeCustomerCollection } from "../lib/schedule.ts";
 
 export const opsRouter = Router();
 
@@ -404,7 +404,7 @@ opsRouter.post(
             data: { status: "verified", verifiedBy: user.id },
           });
           if (payment.appliesTo === "customer") {
-            await applyCustomerPayment(tx, payment.bookingId, payment.amount);
+            await recomputeCustomerCollection(tx, payment.bookingId);
           }
         }
       }

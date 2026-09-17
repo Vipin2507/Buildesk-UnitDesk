@@ -62,9 +62,21 @@ bookingsRouter.get(
     const ids = await accessibleProjectIds(user);
     const { page, pageSize, skip, take } = listMeta(req);
     const search = String(req.query.search ?? "").trim();
+    const statusRaw = String(req.query.status ?? "").trim();
+    const statuses = statusRaw
+      ? statusRaw.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
     const where = {
-      projectId: req.query.project ? String(req.query.project) : { in: ids },
-      ...(req.query.status ? { status: String(req.query.status) } : {}),
+      projectId: req.query.projectId
+        ? String(req.query.projectId)
+        : req.query.project
+          ? String(req.query.project)
+          : { in: ids },
+      ...(statuses.length === 1
+        ? { status: statuses[0] }
+        : statuses.length > 1
+          ? { status: { in: statuses } }
+          : {}),
       ...(search
         ? {
             OR: [

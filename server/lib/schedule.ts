@@ -5,8 +5,27 @@ type Tx = {
     createMany: Function;
     findMany: Function;
     update: Function;
+    deleteMany: Function;
+  };
+  payment: {
+    findMany: Function;
+  };
+  booking: {
+    findUnique: Function;
   };
 };
+
+export function collectableAmount(
+  financials: { valueToBeCollected?: number | null; totalCost?: number | null; finance?: number | null } | null,
+) {
+  if (!financials) return 0;
+  if (financials.valueToBeCollected != null && financials.valueToBeCollected > 0) {
+    return round2(financials.valueToBeCollected);
+  }
+  const total = financials.totalCost ?? 0;
+  const finance = financials.finance ?? 0;
+  return round2(Math.max(0, total - finance));
+}
 
 export async function generateSchedules(
   tx: Tx,
@@ -16,15 +35,11 @@ export async function generateSchedules(
     financials: { totalCost: number; valueToBeCollected: number; finance: number } | null;
   },
 ) {
-  const total = booking.financials?.totalCost ?? 0;
-  const finance = booking.financials?.finance ?? 0;
-  const bookingAmt =
-    finance > 0
-      ? round2(Math.max(0, total - finance))
-      : booking.financials?.valueToBeCollected
-        ? round2(Math.min(booking.financials.valueToBeCollected, total * 0.2))
-        : round2(total * 0.2);
-  const rest = Math.max(0, round2(total - bookingAmt));
+  const collect = collectableAmount(booking.financials);
+  if (collect <= 0) return;
+
+  const bookingAmt = round2(collect * 0.2);
+  const rest = Math.max(0, round2(collect - bookingAmt));
   const thirds = round2(rest / 3);
   const last = round2(rest - thirds * 2);
   const start = new Date(booking.bookingDate);
@@ -74,6 +89,51 @@ export async function applyCustomerPayment(tx: Tx, bookingId: string, amount: nu
     });
     remaining = round2(remaining - take);
   }
+}
+
+/** Rebuild demand schedule from value-to-be-collected, then re-apply customer payments. */
+export async function recomputeCustomerCollection(tx: Tx, bookingId: string) {
+  const booking = await tx.booking.findUnique({
+    where: { id: bookingId },
+    include: { financials: true },
+  });
+  if (!booking) return;
+
+  await tx.paymentSchedule.deleteMany({ where: { bookingId } });
+  await generateSchedules(tx, booking);
+
+  const payments = await tx.payment.findMany({
+    where: {
+      bookingId,
+      appliesTo: "customer",
+      status: { not: "pending" },
+    },
+    orderBy: [{ paymentDate: "asc" }, { createdAt: "asc" }],
+  });
+  for (const payment of payments) {
+    await applyCustomerPayment(tx, bookingId, payment.amount);
+  }
+}
+
+export async function customerCollectionSummary(
+  tx: { payment: { findMany: Function }; booking: { findUnique: Function } },
+  bookingId: string,
+) {
+  const booking = await tx.booking.findUnique({
+    where: { id: bookingId },
+    include: { financials: true },
+  });
+  const toCollect = collectableAmount(booking?.financials ?? null);
+  const payments = await tx.payment.findMany({
+    where: {
+      bookingId,
+      appliesTo: "customer",
+      status: { not: "pending" },
+    },
+  });
+  const received = round2(payments.reduce((s: number, p: { amount: number }) => s + p.amount, 0));
+  const outstanding = round2(Math.max(0, toCollect - received));
+  return { toCollect, received, outstanding };
 }
 
 export function markOverdueStatus(dueDate: Date, outstanding: number, status: string) {
