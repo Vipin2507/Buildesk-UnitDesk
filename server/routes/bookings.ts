@@ -3,11 +3,10 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
 import { accessibleProjectIds, assertProjectAccess, requirePermission } from "../lib/access.ts";
-import { computeEntitlement } from "../lib/commission.ts";
+import { computeEntitlement, round2 } from "../lib/commission.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
 import { collectableAmount, generateSchedules } from "../lib/schedule.ts";
-import { round2 } from "../lib/commission.ts";
 import { issueDocument } from "../lib/invoice.ts";
 import { audit } from "../lib/audit.ts";
 import { notify } from "../lib/notify.ts";
@@ -189,15 +188,25 @@ bookingsRouter.get(
     };
 
     const sort = String(req.query.sort ?? "date");
-    const dir = String(req.query.dir ?? "desc") === "asc" ? "asc" : "desc";
+    const dirAsc = String(req.query.dir ?? "desc") === "asc";
     const orderBy =
       sort === "value"
-        ? { financials: { totalCost: dir } }
+        ? { financials: { totalCost: dirAsc ? ("asc" as const) : ("desc" as const) } }
         : sort === "unit"
-          ? { unit: { unitNumber: dir } }
+          ? { unit: { unitNumber: dirAsc ? ("asc" as const) : ("desc" as const) } }
           : sort === "booking"
-            ? { bookingNumber: dir }
-            : { bookingDate: dir };
+            ? { bookingNumber: dirAsc ? ("asc" as const) : ("desc" as const) }
+            : { bookingDate: dirAsc ? ("asc" as const) : ("desc" as const) };
+
+    const bookingInclude = {
+      unit: { include: { floor: { include: { wing: true } } } },
+      project: { include: { company: true } },
+      customers: true,
+      financials: true,
+      channelPartner: true,
+      entitlement: true,
+      payments: { where: { appliesTo: "customer" } },
+    } as const;
 
     const [rows, total] = await Promise.all([
       prisma.booking.findMany({
@@ -205,15 +214,7 @@ bookingsRouter.get(
         skip,
         take,
         orderBy,
-        include: {
-          unit: { include: { floor: { include: { wing: true } } } },
-          project: { include: { company: true } },
-          customers: true,
-          financials: true,
-          channelPartner: true,
-          entitlement: true,
-          payments: { where: { appliesTo: "customer" } },
-        },
+        include: bookingInclude,
       }),
       prisma.booking.count({ where }),
     ]);
@@ -221,7 +222,9 @@ bookingsRouter.get(
     const data = rows.map((b) => {
       const toCollect = collectableAmount(b.financials);
       const received = round2(
-        b.payments.filter((p) => p.status !== "pending").reduce((s, p) => s + p.amount, 0),
+        b.payments
+          .filter((p: { status: string }) => p.status !== "pending")
+          .reduce((s: number, p: { amount: number }) => s + p.amount, 0),
       );
       const { payments: _payments, ...rest } = b;
       return {
