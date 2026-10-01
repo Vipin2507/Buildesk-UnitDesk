@@ -3,11 +3,21 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
 import { assertProjectAccess, requirePermission } from "../lib/access.ts";
+import { round2 } from "../lib/commission.ts";
+import { collectableAmount } from "../lib/schedule.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
 import { audit } from "../lib/audit.ts";
 
 export const inventoryRouter = Router();
+
+function unitListPrice(u: {
+  basePrice?: number | null;
+  plc?: number | null;
+  otherCharges?: number | null;
+}) {
+  return round2((u.basePrice ?? 0) + (u.plc ?? 0) + (u.otherCharges ?? 0));
+}
 
 inventoryRouter.get(
   "/projects/:id/inventory",
@@ -28,18 +38,30 @@ inventoryRouter.get(
     const statusFilter = req.query.status ? String(req.query.status) : undefined;
     const typeFilter = req.query.unitType ? String(req.query.unitType) : undefined;
 
-    const wings = await prisma.wing.findMany({
-      where: { projectId },
-      orderBy: { sortOrder: "asc" },
-      include: {
-        floors: {
-          orderBy: { number: "desc" },
-          include: {
-            units: { orderBy: { sortOrder: "asc" } },
+    const [wings, bookings] = await Promise.all([
+      prisma.wing.findMany({
+        where: { projectId },
+        orderBy: { sortOrder: "asc" },
+        include: {
+          floors: {
+            orderBy: { number: "desc" },
+            include: {
+              units: { orderBy: { sortOrder: "asc" } },
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.booking.findMany({
+        where: { projectId, status: { not: "cancelled" } },
+        include: {
+          financials: true,
+          payments: { where: { appliesTo: "customer" } },
+          customers: { where: { role: "primary" }, take: 1 },
+        },
+      }),
+    ]);
+
+    const bookingByUnit = new Map(bookings.map((b) => [b.unitId, b]));
 
     const allUnits = wings.flatMap((w) => w.floors.flatMap((f) => f.units));
     const countBy = (status: string) => allUnits.filter((u) => u.status === status).length;
@@ -53,9 +75,71 @@ inventoryRouter.get(
       not_available: countBy("not_available"),
     };
 
+    let totalValue = 0;
+    let totalSold = 0;
+    let totalReceived = 0;
+    let totalToCollect = 0;
+
+    for (const u of allUnits) {
+      const listPrice = unitListPrice(u);
+      const booking = bookingByUnit.get(u.id);
+      if (booking?.financials) {
+        const soldValue = round2(booking.financials.totalCost ?? 0);
+        const toCollect = collectableAmount(booking.financials);
+        const received = round2(
+          booking.payments
+            .filter((p) => p.status !== "pending")
+            .reduce((s, p) => s + p.amount, 0),
+        );
+        totalValue += soldValue || listPrice;
+        totalSold += soldValue;
+        totalToCollect += toCollect;
+        totalReceived += received;
+      } else {
+        totalValue += listPrice;
+      }
+    }
+
+    const totalRemaining = round2(
+      allUnits
+        .filter((u) => u.status === "available" || u.status === "hold")
+        .reduce((s, u) => s + unitListPrice(u), 0),
+    );
+    totalValue = round2(totalValue);
+    totalSold = round2(totalSold);
+    totalReceived = round2(totalReceived);
+    totalToCollect = round2(totalToCollect);
+    const totalOutstanding = round2(Math.max(0, totalToCollect - totalReceived));
+
+    const finance = {
+      totalValue,
+      totalSold,
+      totalRemaining,
+      totalReceived,
+      totalToCollect,
+      totalOutstanding,
+      bookedUnits: kpis.sold + kpis.booked,
+      collectionPct: totalToCollect ? Math.round((totalReceived / totalToCollect) * 1000) / 10 : 0,
+    };
+
     const wingSummaries = wings.map((w) => {
       const units = w.floors.flatMap((f) => f.units);
       const sold = units.filter((u) => u.status === "sold" || u.status === "booked").length;
+      let wingSoldValue = 0;
+      let wingReceived = 0;
+      let wingRemaining = 0;
+      for (const u of units) {
+        const booking = bookingByUnit.get(u.id);
+        if (booking?.financials) {
+          wingSoldValue += booking.financials.totalCost ?? 0;
+          wingReceived += booking.payments
+            .filter((p) => p.status !== "pending")
+            .reduce((s, p) => s + p.amount, 0);
+        }
+        if (u.status === "available" || u.status === "hold") {
+          wingRemaining += unitListPrice(u);
+        }
+      }
       return {
         id: w.id,
         name: w.name,
@@ -66,6 +150,9 @@ inventoryRouter.get(
         hold: units.filter((u) => u.status === "hold").length,
         blocked: units.filter((u) => u.status === "blocked").length,
         pctSold: units.length ? Math.round((sold / units.length) * 100) : 0,
+        soldValue: round2(wingSoldValue),
+        received: round2(wingReceived),
+        remainingValue: round2(wingRemaining),
       };
     });
 
@@ -79,6 +166,18 @@ inventoryRouter.get(
       sortOrder: number;
       wingId: string;
       wingName: string;
+      basePrice: number | null;
+      listPrice: number;
+      booking: {
+        id: string;
+        bookingNumber: string;
+        bookingDate: Date;
+        customerName: string | null;
+        soldValue: number;
+        toCollect: number;
+        received: number;
+        outstanding: number;
+      } | null;
     };
     const floorMap = new Map<number, FloorUnit[]>();
     for (const wing of wings) {
@@ -86,17 +185,41 @@ inventoryRouter.get(
         const existing = floorMap.get(floor.number) ?? [];
         floorMap.set(floor.number, [
           ...existing,
-          ...floor.units.map((u) => ({
-            id: u.id,
-            unitNumber: u.unitNumber,
-            status: u.status,
-            unitType: u.unitType,
-            configuration: u.configuration,
-            photoUrl: u.photoUrl,
-            sortOrder: u.sortOrder,
-            wingId: wing.id,
-            wingName: wing.name,
-          })),
+          ...floor.units.map((u) => {
+            const booking = bookingByUnit.get(u.id);
+            const soldValue = round2(booking?.financials?.totalCost ?? 0);
+            const toCollect = collectableAmount(booking?.financials ?? null);
+            const received = round2(
+              (booking?.payments ?? [])
+                .filter((p) => p.status !== "pending")
+                .reduce((s, p) => s + p.amount, 0),
+            );
+            return {
+              id: u.id,
+              unitNumber: u.unitNumber,
+              status: u.status,
+              unitType: u.unitType,
+              configuration: u.configuration,
+              photoUrl: u.photoUrl,
+              sortOrder: u.sortOrder,
+              wingId: wing.id,
+              wingName: wing.name,
+              basePrice: u.basePrice,
+              listPrice: unitListPrice(u),
+              booking: booking
+                ? {
+                    id: booking.id,
+                    bookingNumber: booking.bookingNumber,
+                    bookingDate: booking.bookingDate,
+                    customerName: booking.customers[0]?.name ?? null,
+                    soldValue,
+                    toCollect,
+                    received,
+                    outstanding: round2(Math.max(0, toCollect - received)),
+                  }
+                : null,
+            };
+          }),
         ]);
       }
     }
@@ -107,6 +230,7 @@ inventoryRouter.get(
     res.json({
       project,
       kpis,
+      finance,
       wings: wingSummaries,
       floors,
       filters: { wing: wingFilter ?? null, status: statusFilter ?? null, unitType: typeFilter ?? null },

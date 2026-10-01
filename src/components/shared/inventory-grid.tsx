@@ -15,6 +15,18 @@ export type GridUnit = {
   sortOrder: number;
   wingId?: string;
   wingName?: string;
+  basePrice?: number | null;
+  listPrice?: number;
+  booking?: {
+    id: string;
+    bookingNumber: string;
+    bookingDate: string;
+    customerName: string | null;
+    soldValue: number;
+    toCollect: number;
+    received: number;
+    outstanding: number;
+  } | null;
 };
 
 export type GridFloor = {
@@ -40,7 +52,13 @@ const statusTintOverlay: Record<string, string> = {
   not_available: "bg-status-unavailable",
 };
 
-function isDimmed(unit: GridUnit, status?: string | null, wingId?: string | null) {
+function isDimmed(
+  unit: GridUnit,
+  status?: string | null,
+  wingId?: string | null,
+  dimIf?: ((unit: GridUnit) => boolean) | null,
+) {
+  if (dimIf?.(unit)) return true;
   if (status && unit.status !== status) return true;
   if (wingId && unit.wingId !== wingId) return true;
   return false;
@@ -115,12 +133,14 @@ function UnitCardGrid({
   units,
   dimStatus,
   dimWingId,
+  dimIf,
   selectedId,
   onSelect,
 }: {
   units: GridUnit[];
   dimStatus?: string | null;
   dimWingId?: string | null;
+  dimIf?: ((unit: GridUnit) => boolean) | null;
   selectedId?: string | null;
   onSelect: (unitId: string) => void;
 }) {
@@ -130,7 +150,7 @@ function UnitCardGrid({
         <UnitCard
           key={unit.id}
           unit={unit}
-          dim={isDimmed(unit, dimStatus, dimWingId)}
+          dim={isDimmed(unit, dimStatus, dimWingId, dimIf)}
           selected={selectedId === unit.id}
           onSelect={onSelect}
         />
@@ -143,12 +163,14 @@ function FloorAccordions({
   floors,
   dimStatus,
   dimWingId,
+  dimIf,
   selectedId,
   onSelect,
 }: {
   floors: GridFloor[];
   dimStatus?: string | null;
   dimWingId?: string | null;
+  dimIf?: ((unit: GridUnit) => boolean) | null;
   selectedId?: string | null;
   onSelect: (unitId: string) => void;
 }) {
@@ -168,6 +190,7 @@ function FloorAccordions({
               units={floor.units}
               dimStatus={dimStatus}
               dimWingId={dimWingId}
+              dimIf={dimIf}
               selectedId={selectedId}
               onSelect={onSelect}
             />
@@ -204,6 +227,7 @@ export function InventoryGrid({
   onSelect,
   dimStatus,
   dimWingId,
+  dimIf,
   selectedId,
   variant = "unit",
 }: {
@@ -211,6 +235,7 @@ export function InventoryGrid({
   onSelect: (unitId: string) => void;
   dimStatus?: string | null;
   dimWingId?: string | null;
+  dimIf?: ((unit: GridUnit) => boolean) | null;
   selectedId?: string | null;
   variant?: "unit" | "wing" | "floor";
 }) {
@@ -232,6 +257,7 @@ export function InventoryGrid({
             <FloorAccordions
               floors={group.floors}
               dimStatus={dimStatus}
+              dimIf={dimIf}
               selectedId={selectedId}
               onSelect={onSelect}
             />
@@ -254,6 +280,7 @@ export function InventoryGrid({
               units={floor.units}
               dimStatus={dimStatus}
               dimWingId={dimWingId}
+              dimIf={dimIf}
               selectedId={selectedId}
               onSelect={onSelect}
             />
@@ -268,6 +295,7 @@ export function InventoryGrid({
       floors={floors}
       dimStatus={dimStatus}
       dimWingId={dimWingId}
+      dimIf={dimIf}
       selectedId={selectedId}
       onSelect={onSelect}
     />

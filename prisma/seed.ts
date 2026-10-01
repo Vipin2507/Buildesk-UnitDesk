@@ -1,10 +1,28 @@
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { formatUnitNumber } from "../server/lib/units.ts";
-import { computeEntitlement } from "../server/lib/commission.ts";
+import { computeEntitlement, round2 } from "../server/lib/commission.ts";
+import { recomputeCustomerCollection } from "../server/lib/schedule.ts";
 
 const prisma = new PrismaClient();
 const DOMAIN = "cravingcode.in";
+const PAYMENT_MODES = ["neft", "rtgs", "upi", "cash", "cheque"] as const;
+const PAYMENT_STATUSES = ["received", "verified", "reconciled", "pending"] as const;
+
+function daysFromNow(offset: number) {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() + offset);
+  return d;
+}
+
+function monthsAgo(months: number, day = 12) {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setMonth(d.getMonth() - months);
+  d.setDate(Math.min(day, 28));
+  return d;
+}
 
 const ACTIONS = [
   "view",
@@ -32,11 +50,18 @@ function hash(s: string) {
 function statusFor(unitNumber: string) {
   const r = hash(unitNumber) % 100;
   if (r < 9) return "sold";
-  if (r < 16) return "booked";
-  if (r < 22) return "hold";
-  if (r < 26) return "blocked";
-  if (r < 30) return "not_available";
+  if (r < 22) return "booked";
+  if (r < 28) return "hold";
+  if (r < 31) return "blocked";
+  if (r < 34) return "not_available";
   return "available";
+}
+
+function listPriceFor(unitTypeIndex: number, floorNo: number, wingIndex: number) {
+  const base = unitTypeIndex === 1 ? 48_00_000 : unitTypeIndex <= 5 ? 72_00_000 : 98_00_000;
+  const floorPremium = floorNo * 35_000;
+  const wingPremium = wingIndex * 75_000;
+  return round2(base + floorPremium + wingPremium);
 }
 
 function slug(name: string) {
@@ -229,7 +254,7 @@ async function main() {
   ]);
 
   const wingNames = ["A", "B", "C"];
-  const units: { id: string; number: string; status: string }[] = [];
+  const units: { id: string; number: string; status: string; listPrice: number; unitType: string }[] = [];
 
   for (const [wi, name] of wingNames.entries()) {
     const wing = await prisma.wing.create({
@@ -242,6 +267,9 @@ async function main() {
       for (let u = 1; u <= 8; u++) {
         const unitNumber = formatUnitNumber("[Wing]-[Floor][Unit:2]", name, floorNo, u);
         const st = statusFor(unitNumber);
+        const basePrice = listPriceFor(u, floorNo, wi);
+        const plc = 1_50_000 + (floorNo > 8 ? 50_000 : 0);
+        const otherCharges = 85_000;
         const created = await prisma.unit.create({
           data: {
             floorId: floor.id,
@@ -254,14 +282,20 @@ async function main() {
             balconyArea: 65,
             facing: ["East", "West", "North", "South"][(u - 1) % 4],
             parking: u === 1 ? "1 open" : "1 covered",
-            basePrice: u === 1 ? 4800000 : u <= 5 ? 7200000 : 9800000,
-            plc: 150000,
-            otherCharges: 85000,
+            basePrice,
+            plc,
+            otherCharges,
             sortOrder: u,
             status: st,
           },
         });
-        units.push({ id: created.id, number: unitNumber, status: st });
+        units.push({
+          id: created.id,
+          number: unitNumber,
+          status: st,
+          listPrice: round2(basePrice + plc + otherCharges),
+          unitType: created.unitType ?? "2BHK",
+        });
       }
     }
   }
@@ -277,21 +311,35 @@ async function main() {
     "Sneha Kadam",
     "Arjun Nair",
     "Kavita Rao",
+    "Nikhil Deshmukh",
+    "Ananya Shah",
+    "Vikram Singh",
+    "Pooja Menon",
+    "Siddharth Bose",
+    "Rhea Kapoor",
+    "Aditya Kulkarni",
+    "Neha Verma",
+    "Manish Tiwari",
+    "Shreya Banerjee",
   ];
 
-  for (const [i, unit] of bookable.slice(0, 36).entries()) {
-    const agreement =
-      unit.number.endsWith("06") || unit.number.endsWith("07") || unit.number.endsWith("08") ? 1_07_14_286 : 80_76_190;
+  const bookedIds: string[] = [];
+
+  for (const [i, unit] of bookable.entries()) {
+    // Agreement ≈ 90–105% of current list price so inventory value vs sold value is analysable
+    const agreement = round2(unit.listPrice * (0.9 + (hash(unit.number) % 16) / 100));
     const gst = Math.round(agreement * 0.05);
     const otherCharges = 85000;
     const gstOnAgreement = Math.round(agreement * 0.01);
     const stampDutyRegistration = Math.round(agreement * 0.05) + 45000;
-    const totalCost = agreement + gst + otherCharges + gstOnAgreement + stampDutyRegistration;
-    const finance = Math.round(totalCost * 0.8);
-    const valueToBeCollected = Math.max(0, totalCost - finance);
+    const totalCost = round2(agreement + gst + otherCharges + gstOnAgreement + stampDutyRegistration);
+    // Vary bank finance share so value-to-collect / outstanding differ by booking
+    const financeShare = [0.7, 0.75, 0.8, 0.85, 0][i % 5];
+    const finance = round2(totalCost * financeShare);
+    const valueToBeCollected = round2(Math.max(0, totalCost - finance));
     const partner = i % 3 === 0 ? partners[0] : i % 3 === 1 ? partners[1] : null;
     const snap = partner ? computeEntitlement(pctRule, totalCost) : null;
-    const date = new Date(2025, (i % 10) + 1, (i % 27) + 1);
+    const date = monthsAgo(1 + (i % 10), (i % 25) + 1);
     const buyer = names[i % names.length];
     const mail = `${slug(buyer)}${i >= names.length ? i : ""}@${DOMAIN}`;
     const booking = await prisma.booking.create({
@@ -329,8 +377,10 @@ async function main() {
         },
       },
     });
+    bookedIds.push(booking.id);
+
     if (partner && snap) {
-      const received = i % 2 === 0 ? Math.round(snap.amount * 0.4) : 0;
+      const received = i % 2 === 0 ? round2(snap.amount * 0.4) : 0;
       await prisma.partnerEntitlement.create({
         data: {
           bookingId: booking.id,
@@ -338,38 +388,223 @@ async function main() {
           entitlementPercent: snap.percent,
           entitlementAmount: snap.amount,
           received,
-          outstanding: snap.amount - received,
+          outstanding: round2(snap.amount - received),
         },
       });
       if (received) {
         await prisma.payment.create({
           data: {
             bookingId: booking.id,
-            paymentDate: date,
+            paymentDate: monthsAgo(1, 8 + (i % 10)),
             amount: received,
             paymentMode: "neft",
             utrOrCheque: `HDFCN${900000 + i}`,
             bank: BANKS[i % BANKS.length],
             appliesTo: "partner",
             status: "verified",
+            remarks: "Partner commission payout",
             addedBy: admin.id,
+          },
+        });
+      } else if (i % 6 === 0) {
+        await prisma.payment.create({
+          data: {
+            bookingId: booking.id,
+            paymentDate: daysFromNow(-2),
+            amount: round2(snap.amount * 0.25),
+            paymentMode: "rtgs",
+            utrOrCheque: `AXRTG${700000 + i}`,
+            bank: BANKS[(i + 1) % BANKS.length],
+            appliesTo: "partner",
+            status: "pending",
+            remarks: "Awaiting finance verification",
+            addedBy: salesUser.id,
           },
         });
       }
     }
-    await prisma.payment.create({
-      data: {
-        bookingId: booking.id,
-        paymentDate: date,
-        amount: 200000,
-        paymentMode: i % 2 ? "upi" : "cheque",
-        utrOrCheque: i % 2 ? `${slug(buyer)}@okhdfcbank` : `CHQ${1000 + i}`,
-        bank: BANKS[(i + 2) % BANKS.length],
-        appliesTo: "customer",
+
+    // Customer receipts — varied patterns against value-to-be-collected
+    const collect = valueToBeCollected;
+    const bookingAmt = round2(collect * 0.2);
+    const slab = round2(collect * 0.15);
+    const mode = PAYMENT_MODES[i % PAYMENT_MODES.length];
+    const bank = BANKS[i % BANKS.length];
+    const pattern = i % 7;
+
+    const customerPayments: {
+      amount: number;
+      paymentDate: Date;
+      paymentMode: (typeof PAYMENT_MODES)[number];
+      status: (typeof PAYMENT_STATUSES)[number];
+      utrOrCheque: string;
+      remarks?: string;
+    }[] = [];
+
+    if (pattern === 0) {
+      // Nearly collected across older + this-month receipts
+      customerPayments.push(
+        {
+          amount: bookingAmt,
+          paymentDate: monthsAgo(4, 5),
+          paymentMode: "neft",
+          status: "reconciled",
+          utrOrCheque: `NEFT${100100 + i}`,
+          remarks: "Booking amount",
+        },
+        {
+          amount: slab,
+          paymentDate: monthsAgo(2, 18),
+          paymentMode: "rtgs",
+          status: "verified",
+          utrOrCheque: `RTGS${200200 + i}`,
+          remarks: "Slab 1",
+        },
+        {
+          amount: round2(Math.min(slab * 1.2, Math.max(0, collect - bookingAmt - slab))),
+          paymentDate: daysFromNow(-(i % 5)),
+          paymentMode: "upi",
+          status: "received",
+          utrOrCheque: `${slug(buyer)}@okhdfcbank`,
+          remarks: "This month collection",
+        },
+      );
+    } else if (pattern === 1) {
+      // Token / booking amount only
+      customerPayments.push({
+        amount: bookingAmt,
+        paymentDate: monthsAgo(2, 10 + (i % 8)),
+        paymentMode: mode,
         status: "received",
-        addedBy: salesUser.id,
-      },
-    });
+        utrOrCheque: mode === "cheque" ? `CHQ${1100 + i}` : `UPI${300300 + i}`,
+        remarks: "Booking token",
+      });
+    } else if (pattern === 2) {
+      // Partial received + pending cheque
+      customerPayments.push(
+        {
+          amount: bookingAmt,
+          paymentDate: monthsAgo(1, 6),
+          paymentMode: "neft",
+          status: "verified",
+          utrOrCheque: `HDFCN${310000 + i}`,
+          remarks: "Booking amount verified",
+        },
+        {
+          amount: slab,
+          paymentDate: daysFromNow(-1),
+          paymentMode: "cheque",
+          status: "pending",
+          utrOrCheque: `CHQ${2200 + i}`,
+          remarks: "Cheque deposited — clearing",
+        },
+      );
+    } else if (pattern === 3) {
+      // No customer payment yet — full outstanding (optional draft pending)
+      if (i % 2 === 0) {
+        customerPayments.push({
+          amount: Math.min(100000, bookingAmt),
+          paymentDate: daysFromNow(0),
+          paymentMode: "upi",
+          status: "pending",
+          utrOrCheque: `${slug(buyer)}@paytm`,
+          remarks: "Customer promised — not yet cleared",
+        });
+      }
+    } else if (pattern === 4) {
+      // Strong this-month collections for KPI
+      customerPayments.push(
+        {
+          amount: bookingAmt,
+          paymentDate: daysFromNow(-(8 + (i % 6))),
+          paymentMode: "neft",
+          status: "received",
+          utrOrCheque: `NEFT${400400 + i}`,
+          remarks: "MTD booking amount",
+        },
+        {
+          amount: slab,
+          paymentDate: daysFromNow(-(i % 4)),
+          paymentMode: "upi",
+          status: "verified",
+          utrOrCheque: `${slug(buyer)}@oksbi`,
+          remarks: "MTD slab",
+        },
+      );
+    } else if (pattern === 5) {
+      // Fully / almost fully collected
+      const a1 = bookingAmt;
+      const a2 = round2(collect * 0.3);
+      const a3 = round2(Math.max(0, collect - a1 - a2));
+      customerPayments.push(
+        {
+          amount: a1,
+          paymentDate: monthsAgo(5, 3),
+          paymentMode: "neft",
+          status: "reconciled",
+          utrOrCheque: `NEFT${500500 + i}`,
+        },
+        {
+          amount: a2,
+          paymentDate: monthsAgo(3, 14),
+          paymentMode: "rtgs",
+          status: "reconciled",
+          utrOrCheque: `RTGS${500600 + i}`,
+        },
+        {
+          amount: a3,
+          paymentDate: monthsAgo(1, 20),
+          paymentMode: "neft",
+          status: "verified",
+          utrOrCheque: `NEFT${500700 + i}`,
+          remarks: "Final towards value to collect",
+        },
+      );
+    } else {
+      // Mid collection + cash
+      customerPayments.push({
+        amount: round2(bookingAmt + slab * 0.5),
+        paymentDate: monthsAgo(1, 22),
+        paymentMode: i % 2 ? "cash" : "upi",
+        status: "received",
+        utrOrCheque: i % 2 ? `CASH-${1000 + i}` : `${slug(buyer)}@ybl`,
+        remarks: i % 2 ? "Cash at site office" : "UPI receipt",
+      });
+    }
+
+    let running = 0;
+    for (const [pi, p] of customerPayments.entries()) {
+      // Cap non-pending amounts so seed never exceeds value-to-be-collected
+      let amount = round2(p.amount);
+      if (p.status !== "pending") {
+        const room = round2(Math.max(0, collect - running));
+        amount = round2(Math.min(amount, room));
+        if (amount <= 0) continue;
+        running = round2(running + amount);
+      } else if (amount <= 0) {
+        continue;
+      }
+
+      await prisma.payment.create({
+        data: {
+          bookingId: booking.id,
+          paymentDate: p.paymentDate,
+          amount,
+          paymentMode: p.paymentMode,
+          utrOrCheque: p.utrOrCheque,
+          bank,
+          appliesTo: "customer",
+          status: p.status,
+          remarks: p.remarks ?? null,
+          addedBy: pi % 2 ? admin.id : salesUser.id,
+          verifiedBy: p.status === "verified" || p.status === "reconciled" ? admin.id : null,
+        },
+      });
+    }
+  }
+
+  for (const bookingId of bookedIds) {
+    await recomputeCustomerCollection(prisma, bookingId);
   }
 
   await prisma.appSetting.upsert({
@@ -383,7 +618,30 @@ async function main() {
     create: { key: "orgEmail", value: `hello@${DOMAIN}` },
   });
 
+  const paymentCount = await prisma.payment.count();
+  const scheduleCount = await prisma.paymentSchedule.count();
+  const soldBooked = await prisma.unit.count({ where: { status: { in: ["sold", "booked"] } } });
+  const orphan = await prisma.unit.count({
+    where: {
+      status: { in: ["sold", "booked"] },
+      bookings: { none: { status: { not: "cancelled" } } },
+    },
+  });
+  const fin = await prisma.bookingFinancial.aggregate({
+    _sum: { totalCost: true, valueToBeCollected: true },
+  });
+  const receivedAgg = await prisma.payment.aggregate({
+    where: { appliesTo: "customer", status: { not: "pending" } },
+    _sum: { amount: true },
+  });
   console.log("Seeded UnitDesk with Indian demo data.");
+  console.log(
+    `Inventory: ${units.length} units · ${soldBooked} sold/booked · ${bookedIds.length} bookings · ${orphan} orphans`,
+  );
+  console.log(
+    `Finance: sold ${Math.round(fin._sum.totalCost ?? 0).toLocaleString("en-IN")} · to-collect ${Math.round(fin._sum.valueToBeCollected ?? 0).toLocaleString("en-IN")} · received ${Math.round(receivedAgg._sum.amount ?? 0).toLocaleString("en-IN")}`,
+  );
+  console.log(`Payments: ${paymentCount} receipts · ${scheduleCount} schedule rows`);
   console.log(`Login: vipin@${DOMAIN} / Admin@123`);
   console.log(`Partner: sanjay@${DOMAIN} / Partner@123`);
 }
