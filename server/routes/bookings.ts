@@ -6,7 +6,8 @@ import { accessibleProjectIds, assertProjectAccess, requirePermission } from "..
 import { computeEntitlement } from "../lib/commission.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
-import { generateSchedules } from "../lib/schedule.ts";
+import { collectableAmount, generateSchedules } from "../lib/schedule.ts";
+import { round2 } from "../lib/commission.ts";
 import { issueDocument } from "../lib/invoice.ts";
 import { audit } from "../lib/audit.ts";
 import { notify } from "../lib/notify.ts";
@@ -56,16 +57,114 @@ async function nextBookingNumber() {
 }
 
 bookingsRouter.get(
+  "/summary",
+  asyncHandler(async (req, res) => {
+    const user = requireUser(req);
+    const projectIds = await accessibleProjectIds(user);
+    const projectId = req.query.projectId ? String(req.query.projectId) : null;
+    if (projectId) await assertProjectAccess(user, projectId);
+
+    const bookingWhere = {
+      status: { not: "cancelled" as const },
+      projectId: projectId ? projectId : { in: projectIds },
+    };
+
+    const [bookings, payments] = await Promise.all([
+      prisma.booking.findMany({
+        where: bookingWhere,
+        include: { financials: true },
+      }),
+      prisma.payment.findMany({
+        where: {
+          booking: bookingWhere,
+          appliesTo: "customer",
+          status: { not: "pending" },
+        },
+      }),
+    ]);
+
+    const byStatus = { booked: 0, confirmed: 0, hold: 0, cancelled: 0 };
+    for (const b of bookings) {
+      if (b.status in byStatus) (byStatus as Record<string, number>)[b.status]++;
+    }
+
+    const totalValue = round2(bookings.reduce((s, b) => s + (b.financials?.totalCost ?? 0), 0));
+    const toCollect = round2(bookings.reduce((s, b) => s + collectableAmount(b.financials), 0));
+    const received = round2(payments.reduce((s, p) => s + p.amount, 0));
+    const outstanding = round2(Math.max(0, toCollect - received));
+
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const thisMonth = bookings.filter((b) => b.bookingDate >= monthStart).length;
+
+    res.json({
+      total: bookings.length,
+      booked: byStatus.booked,
+      confirmed: byStatus.confirmed,
+      hold: byStatus.hold,
+      totalValue,
+      toCollect,
+      received,
+      outstanding,
+      collectionPct: toCollect ? Math.round((received / toCollect) * 1000) / 10 : 0,
+      thisMonth,
+      withPartner: bookings.filter((b) => b.channelPartnerId).length,
+    });
+  }),
+);
+
+bookingsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     const ids = await accessibleProjectIds(user);
     const { page, pageSize, skip, take } = listMeta(req);
     const search = String(req.query.search ?? "").trim();
+    const unitSearch = String(req.query.unit ?? req.query.flat ?? "").trim();
     const statusRaw = String(req.query.status ?? "").trim();
     const statuses = statusRaw
       ? statusRaw.split(",").map((s) => s.trim()).filter(Boolean)
       : [];
+    const hasPartner = String(req.query.hasPartner ?? "") === "1" || String(req.query.hasPartner ?? "") === "true";
+    const fromDate = req.query.from ? new Date(String(req.query.from)) : null;
+    const toDate = req.query.to ? new Date(String(req.query.to)) : null;
+    const thisMonth = String(req.query.thisMonth ?? "") === "1" || String(req.query.thisMonth ?? "") === "true";
+
+    let monthFrom: Date | null = null;
+    let monthTo: Date | null = null;
+    if (thisMonth) {
+      const now = new Date();
+      monthFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+      monthTo = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+    const dateFrom = monthFrom ?? (fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null);
+    const dateTo = monthTo ?? (toDate && !Number.isNaN(toDate.getTime()) ? toDate : null);
+
+    const andFilters: object[] = [];
+    if (search) {
+      const compact = search.replace(/[\s_-]/g, "");
+      const searchOr: object[] = [
+        { bookingNumber: { contains: search } },
+        { customers: { some: { name: { contains: search } } } },
+        { unit: { unitNumber: { contains: search } } },
+        { project: { name: { contains: search } } },
+        { channelPartner: { name: { contains: search } } },
+      ];
+      if (compact && compact.toLowerCase() !== search.toLowerCase()) {
+        searchOr.push({ unit: { unitNumber: { contains: compact } } });
+      }
+      andFilters.push({ OR: searchOr });
+    }
+    if (unitSearch) {
+      const compact = unitSearch.replace(/[\s_-]/g, "");
+      const unitOr: object[] = [{ unit: { unitNumber: { contains: unitSearch } } }];
+      if (compact && compact !== unitSearch) {
+        unitOr.push({ unit: { unitNumber: { contains: compact } } });
+      }
+      andFilters.push({ OR: unitOr });
+    }
+
     const where = {
       projectId: req.query.projectId
         ? String(req.query.projectId)
@@ -77,22 +176,35 @@ bookingsRouter.get(
         : statuses.length > 1
           ? { status: { in: statuses } }
           : {}),
-      ...(search
+      ...(hasPartner ? { channelPartnerId: { not: null } } : {}),
+      ...(dateFrom || dateTo
         ? {
-            OR: [
-              { bookingNumber: { contains: search } },
-              { customers: { some: { name: { contains: search } } } },
-              { unit: { unitNumber: { contains: search } } },
-            ],
+            bookingDate: {
+              ...(dateFrom ? { gte: dateFrom } : {}),
+              ...(dateTo ? { lte: dateTo } : {}),
+            },
           }
         : {}),
+      ...(andFilters.length ? { AND: andFilters } : {}),
     };
-    const [data, total] = await Promise.all([
+
+    const sort = String(req.query.sort ?? "date");
+    const dir = String(req.query.dir ?? "desc") === "asc" ? "asc" : "desc";
+    const orderBy =
+      sort === "value"
+        ? { financials: { totalCost: dir } }
+        : sort === "unit"
+          ? { unit: { unitNumber: dir } }
+          : sort === "booking"
+            ? { bookingNumber: dir }
+            : { bookingDate: dir };
+
+    const [rows, total] = await Promise.all([
       prisma.booking.findMany({
         where,
         skip,
         take,
-        orderBy: { bookingDate: "desc" },
+        orderBy,
         include: {
           unit: { include: { floor: { include: { wing: true } } } },
           project: { include: { company: true } },
@@ -100,10 +212,27 @@ bookingsRouter.get(
           financials: true,
           channelPartner: true,
           entitlement: true,
+          payments: { where: { appliesTo: "customer" } },
         },
       }),
       prisma.booking.count({ where }),
     ]);
+
+    const data = rows.map((b) => {
+      const toCollect = collectableAmount(b.financials);
+      const received = round2(
+        b.payments.filter((p) => p.status !== "pending").reduce((s, p) => s + p.amount, 0),
+      );
+      const { payments: _payments, ...rest } = b;
+      return {
+        ...rest,
+        toCollect,
+        received,
+        outstanding: round2(Math.max(0, toCollect - received)),
+        collectionPct: toCollect ? Math.round((received / toCollect) * 1000) / 10 : 0,
+      };
+    });
+
     res.json(listResult(data, total, page, pageSize));
   }),
 );

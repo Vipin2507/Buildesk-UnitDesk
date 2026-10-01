@@ -280,7 +280,13 @@ inventoryRouter.get(
         floor: { include: { wing: { include: { project: true } } } },
         bookings: {
           where: { status: { not: "cancelled" } },
-          include: { customers: true, financials: true },
+          orderBy: { bookingDate: "desc" },
+          include: {
+            customers: true,
+            financials: true,
+            payments: { orderBy: { paymentDate: "desc" } },
+            channelPartner: true,
+          },
         },
         documents: { orderBy: { createdAt: "desc" } },
       },
@@ -291,7 +297,35 @@ inventoryRouter.get(
       wingId: unit.floor.wingId,
       unitId: unit.id,
     });
-    res.json(unit);
+
+    const listPrice = unitListPrice(unit);
+    const bookings = unit.bookings.map((b) => {
+      const toCollect = collectableAmount(b.financials);
+      const customerReceived = round2(
+        b.payments
+          .filter((p) => p.appliesTo === "customer" && p.status !== "pending")
+          .reduce((s, p) => s + p.amount, 0),
+      );
+      const partnerReceived = round2(
+        b.payments
+          .filter((p) => p.appliesTo === "partner" && p.status !== "pending")
+          .reduce((s, p) => s + p.amount, 0),
+      );
+      return {
+        ...b,
+        toCollect,
+        received: customerReceived,
+        partnerReceived,
+        outstanding: round2(Math.max(0, toCollect - customerReceived)),
+        collectionPct: toCollect ? Math.round((customerReceived / toCollect) * 1000) / 10 : 0,
+      };
+    });
+
+    res.json({
+      ...unit,
+      listPrice,
+      bookings,
+    });
   }),
 );
 
