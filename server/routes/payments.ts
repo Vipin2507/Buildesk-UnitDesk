@@ -99,20 +99,98 @@ paymentsRouter.get(
     const user = requireUser(req);
     const projectIds = await accessibleProjectIds(user);
     const { page, pageSize, skip, take } = listMeta(req);
+    const search = String(req.query.search ?? "").trim();
+    const unitSearch = String(req.query.unit ?? req.query.flat ?? "").trim();
+    const mode = String(req.query.paymentMode ?? "").trim();
+    const fromDate = req.query.from ? new Date(String(req.query.from)) : null;
+    const toDate = req.query.to ? new Date(String(req.query.to)) : null;
+    const thisMonth = String(req.query.thisMonth ?? "") === "1" || String(req.query.thisMonth ?? "") === "true";
+    const statusRaw = String(req.query.status ?? "").trim();
+    const statuses = statusRaw
+      ? statusRaw.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    let monthFrom: Date | null = null;
+    let monthTo: Date | null = null;
+    if (thisMonth) {
+      const now = new Date();
+      monthFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+      monthTo = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    const dateFrom = monthFrom ?? (fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null);
+    const dateTo = monthTo ?? (toDate && !Number.isNaN(toDate.getTime()) ? toDate : null);
+
+    const bookingFilter: Record<string, unknown> = {
+      ...(req.query.projectId
+        ? { projectId: String(req.query.projectId) }
+        : { projectId: { in: projectIds } }),
+    };
+
+    const andFilters: object[] = [];
+
+    if (search) {
+      const compact = search.replace(/[\s_-]/g, "");
+      const searchOr: object[] = [
+        { booking: { bookingNumber: { contains: search } } },
+        { booking: { unit: { unitNumber: { contains: search } } } },
+        { booking: { project: { name: { contains: search } } } },
+        { booking: { customers: { some: { name: { contains: search } } } } },
+        { paymentMode: { contains: search } },
+        { utrOrCheque: { contains: search } },
+        { bank: { contains: search } },
+      ];
+      if (compact && compact.toLowerCase() !== search.toLowerCase()) {
+        searchOr.push({ booking: { unit: { unitNumber: { contains: compact } } } });
+      }
+      andFilters.push({ OR: searchOr });
+    }
+
+    if (unitSearch) {
+      const compact = unitSearch.replace(/[\s_-]/g, "");
+      const unitOr: object[] = [
+        { booking: { unit: { unitNumber: { contains: unitSearch } } } },
+      ];
+      if (compact && compact !== unitSearch) {
+        unitOr.push({ booking: { unit: { unitNumber: { contains: compact } } } });
+      }
+      andFilters.push({ OR: unitOr });
+    }
+
     const where = {
       ...(req.query.bookingId ? { bookingId: String(req.query.bookingId) } : {}),
       ...(req.query.appliesTo ? { appliesTo: String(req.query.appliesTo) } : {}),
-      ...(req.query.status ? { status: String(req.query.status) } : {}),
-      ...(req.query.projectId
-        ? { booking: { projectId: String(req.query.projectId) } }
-        : { booking: { projectId: { in: projectIds } } }),
+      ...(statuses.length === 1
+        ? { status: statuses[0] }
+        : statuses.length > 1
+          ? { status: { in: statuses } }
+          : {}),
+      ...(mode ? { paymentMode: mode } : {}),
+      ...(dateFrom || dateTo
+        ? {
+            paymentDate: {
+              ...(dateFrom ? { gte: dateFrom } : {}),
+              ...(dateTo ? { lte: dateTo } : {}),
+            },
+          }
+        : {}),
+      booking: bookingFilter,
+      ...(andFilters.length ? { AND: andFilters } : {}),
     };
+
+    const orderBy =
+      String(req.query.sort ?? "") === "amount"
+        ? { amount: String(req.query.dir ?? "desc") === "asc" ? ("asc" as const) : ("desc" as const) }
+        : String(req.query.sort ?? "") === "unit"
+          ? { booking: { unit: { unitNumber: String(req.query.dir ?? "asc") === "desc" ? ("desc" as const) : ("asc" as const) } } }
+          : { paymentDate: String(req.query.dir ?? "desc") === "asc" ? ("asc" as const) : ("desc" as const) };
+
     const [data, total] = await Promise.all([
       prisma.payment.findMany({
         where,
         skip,
         take,
-        orderBy: { paymentDate: "desc" },
+        orderBy,
         include: paymentInclude,
       }),
       prisma.payment.count({ where }),
