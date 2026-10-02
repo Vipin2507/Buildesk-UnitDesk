@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { formatUnitNumber } from "../server/lib/units.ts";
 import { computeEntitlement, round2 } from "../server/lib/commission.ts";
 import { recomputeCustomerCollection } from "../server/lib/schedule.ts";
+import { ALL_ACTIONS } from "../server/lib/permissions.ts";
 
 const prisma = new PrismaClient();
 const DOMAIN = "cravingcode.in";
@@ -24,19 +25,7 @@ function monthsAgo(months: number, day = 12) {
   return d;
 }
 
-const ACTIONS = [
-  "view",
-  "add",
-  "edit",
-  "book",
-  "hold",
-  "cancel",
-  "payment_view",
-  "payment_entry",
-  "approve",
-  "reports",
-  "export",
-];
+const ACTIONS = [...ALL_ACTIONS];
 
 const BANKS = [
   "HDFC Bank",

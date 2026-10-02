@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
-import { accessibleProjectIds, requirePermission } from "../lib/access.ts";
+import { accessibleProjectIds, grantDefaultAccessOnProjectCreate, requirePermission } from "../lib/access.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
 
@@ -177,6 +177,7 @@ companiesRouter.post(
           (body.totalWings ?? 0) * (body.totalFloors ?? 0) * (body.unitsPerFloor ?? 0),
       },
     });
+    await grantDefaultAccessOnProjectCreate(created.id, user.id);
     res.status(201).json(created);
   }),
 );

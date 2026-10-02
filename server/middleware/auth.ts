@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
 import { prisma } from "../lib/prisma.ts";
 import { HttpError } from "../lib/http.ts";
+import { ALL_ACTIONS, isSuperAdminRole } from "../lib/permissions.ts";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "unitdesk-dev-secret-change-in-production";
 
@@ -39,13 +40,15 @@ export async function authRequired(req: Request, _res: Response, next: NextFunct
       include: { role: { include: { permissions: true } } },
     });
     if (!employee || employee.status !== "active") throw new HttpError(401, "Unauthorized");
+    const superAdmin = isSuperAdminRole(employee.role);
     req.user = {
       id: employee.id,
       name: employee.name,
       email: employee.email,
       role: employee.role.name,
-      permissions: employee.role.permissions.map((p) => p.action),
-      isSuperAdmin: employee.role.name === "Super Admin",
+      // Super Admin always effective full permission set
+      permissions: superAdmin ? [...ALL_ACTIONS] : employee.role.permissions.map((p) => p.action),
+      isSuperAdmin: superAdmin,
     };
     next();
   } catch (err) {

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
-import { accessibleProjectIds, assertProjectAccess, requirePermission } from "../lib/access.ts";
+import { accessibleProjectIds, assertProjectAccess, grantDefaultAccessOnProjectCreate, requirePermission } from "../lib/access.ts";
 import { defaultsForUnitType, formatUnitNumber } from "../lib/units.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
@@ -116,6 +116,7 @@ projectsRouter.post(
           (body.totalWings ?? 0) * (body.totalFloors ?? 0) * (body.unitsPerFloor ?? 0),
       },
     });
+    await grantDefaultAccessOnProjectCreate(created.id, user.id);
     res.status(201).json(created);
   }),
 );

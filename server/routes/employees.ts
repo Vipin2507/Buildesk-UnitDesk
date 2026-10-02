@@ -3,27 +3,19 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
-import { requirePermission } from "../lib/access.ts";
+import {
+  ensureSuperAdminPermissions,
+  grantAllProjectsToEmployee,
+  requirePermission,
+} from "../lib/access.ts";
+import { ALL_ACTIONS, isSuperAdminRole } from "../lib/permissions.ts";
 import { audit } from "../lib/audit.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
 
 export const employeesRouter = Router();
 
-const ACTIONS = [
-  "view",
-  "add",
-  "edit",
-  "book",
-  "hold",
-  "cancel",
-  "payment_view",
-  "payment_entry",
-  "approve",
-  "reports",
-  "export",
-];
-
+const ACTIONS = [...ALL_ACTIONS];
 const ACTION_SET = ACTIONS as [string, ...string[]];
 
 function publicEmployee<T extends { passwordHash: string }>(row: T) {
@@ -141,16 +133,25 @@ employeesRouter.patch(
     if (role.isSystem && body.name && body.name !== role.name) {
       throw new HttpError(409, "System role names cannot be changed");
     }
+    // Super Admin always keeps the full permission set
+    const permissions =
+      isSuperAdminRole(role) || (body.name ? isSuperAdminRole({ name: body.name, isSystem: role.isSystem }) : false)
+        ? [...ALL_ACTIONS]
+        : body.permissions;
+
     if (body.name && body.name !== role.name) {
       const clash = await prisma.role.findUnique({ where: { name: body.name } });
       if (clash) throw new HttpError(409, "A role with this name already exists");
     }
 
-    if (body.permissions) {
+    if (permissions) {
       await prisma.permission.deleteMany({ where: { roleId: id } });
       await prisma.permission.createMany({
-        data: body.permissions.map((action) => ({ roleId: id, action })),
+        data: permissions.map((action) => ({ roleId: id, action })),
       });
+    }
+    if (isSuperAdminRole(role) || (body.name && isSuperAdminRole({ name: body.name }))) {
+      await ensureSuperAdminPermissions(id);
     }
     const updated = await prisma.role.update({
       where: { id },
@@ -221,6 +222,10 @@ employeesRouter.post(
       status?: string;
     };
     await assertRoleExists(body.roleId);
+    const role = await prisma.role.findUnique({ where: { id: body.roleId } });
+    if (!role) throw new HttpError(404, "Role not found");
+    if (isSuperAdminRole(role)) await ensureSuperAdminPermissions(role.id);
+
     const email = body.email.toLowerCase();
     const exists = await prisma.employee.findUnique({ where: { email } });
     if (exists) throw new HttpError(409, "A user with this email already exists");
@@ -235,6 +240,12 @@ employeesRouter.post(
       },
       include: { role: true, access: { include: { project: true, wing: true } } },
     });
+
+    // Super Admin gets every project by default
+    if (isSuperAdminRole(created.role)) {
+      await grantAllProjectsToEmployee(created.id);
+    }
+
     await audit({
       actorId: user.id,
       actorName: user.name,
@@ -243,7 +254,11 @@ employeesRouter.post(
       entityId: created.id,
       meta: { email: created.email, roleId: created.roleId },
     });
-    res.status(201).json(publicEmployee(created));
+    const refreshed = await prisma.employee.findUnique({
+      where: { id: created.id },
+      include: { role: true, access: { include: { project: true, wing: true } } },
+    });
+    res.status(201).json(publicEmployee(refreshed!));
   }),
 );
 
@@ -403,6 +418,12 @@ employeesRouter.patch(
       },
       include: { role: true, access: { include: { project: true, wing: true } } },
     });
+
+    if (isSuperAdminRole(updated.role)) {
+      await ensureSuperAdminPermissions(updated.roleId);
+      await grantAllProjectsToEmployee(updated.id);
+    }
+
     await audit({
       actorId: user.id,
       actorName: user.name,
@@ -411,7 +432,11 @@ employeesRouter.patch(
       entityId: id,
       meta: { ...body, password: body.password ? "[set]" : undefined },
     });
-    res.json(publicEmployee(updated));
+    const refreshed = await prisma.employee.findUnique({
+      where: { id },
+      include: { role: true, access: { include: { project: true, wing: true } } },
+    });
+    res.json(publicEmployee(refreshed!));
   }),
 );
 
