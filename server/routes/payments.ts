@@ -38,6 +38,9 @@ const paymentInclude = {
       channelPartner: true,
       customers: { where: { role: "primary" }, take: 1 },
       financials: true,
+      payments: {
+        where: { appliesTo: "customer", status: { not: "pending" } },
+      },
     },
   },
 } as const;
@@ -109,6 +112,12 @@ paymentsRouter.get(
     const statuses = statusRaw
       ? statusRaw.split(",").map((s) => s.trim()).filter(Boolean)
       : [];
+    const minCollectedRaw = req.query.minCollected ?? req.query.collectedMin;
+    const minCollected =
+      minCollectedRaw != null && String(minCollectedRaw).trim() !== ""
+        ? Number(minCollectedRaw)
+        : null;
+    const useCollectedFilter = minCollected != null && !Number.isNaN(minCollected) && minCollected > 0;
 
     let monthFrom: Date | null = null;
     let monthTo: Date | null = null;
@@ -157,6 +166,31 @@ paymentsRouter.get(
       andFilters.push({ OR: unitOr });
     }
 
+    if (useCollectedFilter) {
+      const bookings = await prisma.booking.findMany({
+        where: bookingFilter,
+        include: {
+          financials: true,
+          payments: {
+            where: { appliesTo: "customer", status: { not: "pending" } },
+          },
+        },
+      });
+      const qualifyingIds = bookings
+        .filter((b) => {
+          const toCollect = collectableAmount(b.financials);
+          if (toCollect <= 0) return false;
+          const received = round2(b.payments.reduce((s, p) => s + p.amount, 0));
+          const pct = (received / toCollect) * 100;
+          return pct + 0.05 >= (minCollected as number);
+        })
+        .map((b) => b.id);
+      if (!qualifyingIds.length) {
+        return res.json(listResult([], 0, page, pageSize));
+      }
+      andFilters.push({ bookingId: { in: qualifyingIds } });
+    }
+
     const where = {
       ...(req.query.bookingId ? { bookingId: String(req.query.bookingId) } : {}),
       ...(req.query.appliesTo ? { appliesTo: String(req.query.appliesTo) } : {}),
@@ -197,13 +231,23 @@ paymentsRouter.get(
     ]);
     res.json(
       listResult(
-        data.map((p) => ({
-          ...p,
-          booking: {
-            ...p.booking,
-            toCollect: collectableAmount(p.booking.financials),
-          },
-        })),
+        data.map((p) => {
+          const toCollect = collectableAmount(p.booking.financials);
+          const received = round2(
+            (p.booking.payments ?? []).reduce((s: number, x: { amount: number }) => s + x.amount, 0),
+          );
+          const { payments: _bookingPayments, ...bookingRest } = p.booking;
+          return {
+            ...p,
+            booking: {
+              ...bookingRest,
+              toCollect,
+              received,
+              outstanding: round2(Math.max(0, toCollect - received)),
+              collectionPct: toCollect ? Math.round((received / toCollect) * 1000) / 10 : 0,
+            },
+          };
+        }),
         total,
         page,
         pageSize,

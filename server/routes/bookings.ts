@@ -129,6 +129,12 @@ bookingsRouter.get(
     const fromDate = req.query.from ? new Date(String(req.query.from)) : null;
     const toDate = req.query.to ? new Date(String(req.query.to)) : null;
     const thisMonth = String(req.query.thisMonth ?? "") === "1" || String(req.query.thisMonth ?? "") === "true";
+    const minCollectedRaw = req.query.minCollected ?? req.query.collectedMin;
+    const minCollected =
+      minCollectedRaw != null && String(minCollectedRaw).trim() !== ""
+        ? Number(minCollectedRaw)
+        : null;
+    const useCollectedFilter = minCollected != null && !Number.isNaN(minCollected) && minCollected > 0;
 
     let monthFrom: Date | null = null;
     let monthTo: Date | null = null;
@@ -208,18 +214,17 @@ bookingsRouter.get(
       payments: { where: { appliesTo: "customer" } },
     } as const;
 
-    const [rows, total] = await Promise.all([
+    const [rows, totalBase] = await Promise.all([
       prisma.booking.findMany({
         where,
-        skip,
-        take,
+        ...(useCollectedFilter ? {} : { skip, take }),
         orderBy,
         include: bookingInclude,
       }),
-      prisma.booking.count({ where }),
+      useCollectedFilter ? Promise.resolve(0) : prisma.booking.count({ where }),
     ]);
 
-    const data = rows.map((b) => {
+    const enriched = rows.map((b) => {
       const toCollect = collectableAmount(b.financials);
       const received = round2(
         b.payments
@@ -235,6 +240,12 @@ bookingsRouter.get(
         collectionPct: toCollect ? Math.round((received / toCollect) * 1000) / 10 : 0,
       };
     });
+
+    const filtered = useCollectedFilter
+      ? enriched.filter((b) => b.collectionPct + 0.05 >= (minCollected as number))
+      : enriched;
+    const total = useCollectedFilter ? filtered.length : totalBase;
+    const data = useCollectedFilter ? filtered.slice(skip, skip + take) : filtered;
 
     res.json(listResult(data, total, page, pageSize));
   }),

@@ -59,6 +59,9 @@ type Payment = {
     toCollect?: number;
     financials?: { valueToBeCollected: number; totalCost: number; finance: number } | null;
     customers?: { name: string }[];
+    received?: number;
+    outstanding?: number;
+    collectionPct?: number;
   };
 };
 
@@ -96,6 +99,14 @@ type FormState = {
 
 type KpiKey = "all" | "received" | "outstanding" | "month";
 type SortKey = "date" | "amount" | "unit" | "booking";
+
+const COLLECTED_PCT_OPTIONS = [
+  { value: 20, label: "Booking % (≥20%)" },
+  { value: 25, label: "≥25%" },
+  { value: 50, label: "≥50%" },
+  { value: 75, label: "≥75%" },
+  { value: 100, label: "Fully paid" },
+] as const;
 
 const emptyForm = (): FormState => ({
   bookingId: "",
@@ -229,6 +240,7 @@ export function PaymentsPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [kpiFocus, setKpiFocus] = useState<KpiKey>("all");
+  const [minCollected, setMinCollected] = useState<number | null>(null);
   const [sort, setSort] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [bookingPickerQ, setBookingPickerQ] = useState("");
@@ -272,6 +284,7 @@ export function PaymentsPage() {
       thisMonth,
       search: debouncedSearch,
       flatOnly,
+      minCollected,
       sort,
       sortDir,
     }),
@@ -287,6 +300,7 @@ export function PaymentsPage() {
         thisMonth: thisMonth ? 1 : undefined,
         search: debouncedSearch || undefined,
         unit: flatOnly || undefined,
+        minCollected: minCollected ?? undefined,
         sort: sort === "date" ? undefined : sort === "booking" ? undefined : sort,
         dir: sortDir,
       }),
@@ -347,6 +361,10 @@ export function PaymentsPage() {
       }
     }
 
+    if (minCollected != null) {
+      list = list.filter((r) => (r.booking.collectionPct ?? 0) + 0.05 >= minCollected);
+    }
+
     list.sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       if (sort === "amount") return (a.amount - b.amount) * dir;
@@ -355,7 +373,7 @@ export function PaymentsPage() {
       return (new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime()) * dir;
     });
     return list;
-  }, [data?.data, debouncedSearch, flatOnly, sort, sortDir, kpiFocus]);
+  }, [data?.data, debouncedSearch, flatOnly, sort, sortDir, kpiFocus, minCollected]);
 
   const filteredBookings = useMemo(() => {
     const q = bookingPickerQ.trim();
@@ -396,6 +414,7 @@ export function PaymentsPage() {
     fromDate,
     toDate,
     flatOnly,
+    minCollected != null ? String(minCollected) : null,
     kpiFocus !== "all" ? kpiFocus : null,
   ].filter(Boolean).length;
 
@@ -409,6 +428,7 @@ export function PaymentsPage() {
     setFromDate("");
     setToDate("");
     setKpiFocus("all");
+    setMinCollected(null);
     setSort("date");
     setSortDir("desc");
   }
@@ -714,6 +734,18 @@ export function PaymentsPage() {
               {v}
             </Chip>
           ))}
+          <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Collected %
+          </span>
+          {COLLECTED_PCT_OPTIONS.map((opt) => (
+            <Chip
+              key={opt.value}
+              active={minCollected === opt.value}
+              onClick={() => setMinCollected(minCollected === opt.value ? null : opt.value)}
+            >
+              {opt.label}
+            </Chip>
+          ))}
           <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Sort</span>
           {([
             ["date", "Date"],
@@ -730,7 +762,7 @@ export function PaymentsPage() {
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${kpiFocus}-${apiApplies}-${apiStatus}-${modeFilter}-${debouncedSearch}-${flatOnly}-${sort}-${sortDir}`}
+          key={`${kpiFocus}-${apiApplies}-${apiStatus}-${modeFilter}-${debouncedSearch}-${flatOnly}-${sort}-${sortDir}-${minCollected}`}
           initial={reduced ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reduced ? undefined : { opacity: 0, y: -4 }}
@@ -772,6 +804,14 @@ export function PaymentsPage() {
                 header: "To collect",
                 hideOnMobile: true,
                 cell: (r) => inr(collectable(r.booking)),
+              },
+              {
+                key: "pct",
+                header: "Collected",
+                hideOnMobile: true,
+                cell: (r) => (
+                  <span className="tabular-nums font-medium">{r.booking.collectionPct ?? 0}%</span>
+                ),
               },
               { key: "amt", header: "Amount", cell: (r) => <span className="font-semibold tabular-nums">{inr(r.amount)}</span> },
               { key: "mode", header: "Mode", cell: (r) => r.paymentMode.toUpperCase() },

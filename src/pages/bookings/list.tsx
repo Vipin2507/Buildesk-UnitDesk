@@ -63,6 +63,15 @@ type Summary = {
 type KpiKey = "all" | "booked" | "confirmed" | "month" | "outstanding" | "partner" | "received";
 type SortKey = "date" | "value" | "unit" | "booking";
 
+/** Min % of value-to-collect received (booking amount ≈ 20%). */
+const COLLECTED_PCT_OPTIONS = [
+  { value: 20, label: "Booking % (≥20%)" },
+  { value: 25, label: "≥25%" },
+  { value: 50, label: "≥50%" },
+  { value: 75, label: "≥75%" },
+  { value: 100, label: "Fully paid" },
+] as const;
+
 function normalizeFlat(value: string) {
   return value.replace(/[\s_-]/g, "").toLowerCase();
 }
@@ -182,6 +191,7 @@ export function BookingsListPage() {
   const [toDate, setToDate] = useState("");
   const [kpiFocus, setKpiFocus] = useState<KpiKey>("all");
   const [hasPartner, setHasPartner] = useState(false);
+  const [minCollected, setMinCollected] = useState<number | null>(null);
   const [sort, setSort] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -213,6 +223,7 @@ export function BookingsListPage() {
       toDate,
       thisMonth,
       hasPartner: hasPartner || kpiFocus === "partner",
+      minCollected,
       sort,
       sortDir,
       kpiFocus,
@@ -228,6 +239,7 @@ export function BookingsListPage() {
         to: !thisMonth && toDate ? toDate : undefined,
         thisMonth: thisMonth ? 1 : undefined,
         hasPartner: hasPartner || kpiFocus === "partner" ? 1 : undefined,
+        minCollected: minCollected ?? undefined,
         sort: sort === "date" ? undefined : sort,
         dir: sortDir,
       }),
@@ -260,6 +272,9 @@ export function BookingsListPage() {
     if (kpiFocus === "received") {
       list = list.filter((r) => r.received > 0);
     }
+    if (minCollected != null) {
+      list = list.filter((r) => r.collectionPct + 0.05 >= minCollected);
+    }
 
     if (sort === "value" || sort === "unit" || sort === "booking") {
       // server sorted; client reinforce for outstanding filter
@@ -268,7 +283,7 @@ export function BookingsListPage() {
     }
 
     return list;
-  }, [data?.data, debouncedSearch, flatOnly, kpiFocus, sort, sortDir]);
+  }, [data?.data, debouncedSearch, flatOnly, kpiFocus, sort, sortDir, minCollected]);
 
   const activeFilterCount = [
     statusFilter && kpiFocus === "all" ? statusFilter : null,
@@ -276,6 +291,7 @@ export function BookingsListPage() {
     toDate,
     flatOnly,
     hasPartner || kpiFocus === "partner" ? "partner" : null,
+    minCollected != null ? String(minCollected) : null,
     kpiFocus !== "all" ? kpiFocus : null,
   ].filter(Boolean).length;
 
@@ -288,6 +304,7 @@ export function BookingsListPage() {
     setToDate("");
     setKpiFocus("all");
     setHasPartner(false);
+    setMinCollected(null);
     setSort("date");
     setSortDir("desc");
   }
@@ -523,6 +540,18 @@ export function BookingsListPage() {
               <Handshake className="h-3 w-3" /> Channel partner
             </span>
           </Chip>
+          <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Collected %
+          </span>
+          {COLLECTED_PCT_OPTIONS.map((opt) => (
+            <Chip
+              key={opt.value}
+              active={minCollected === opt.value}
+              onClick={() => setMinCollected(minCollected === opt.value ? null : opt.value)}
+            >
+              {opt.label}
+            </Chip>
+          ))}
           <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Sort</span>
           {(
             [
@@ -541,7 +570,7 @@ export function BookingsListPage() {
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${kpiFocus}-${apiStatus}-${debouncedSearch}-${flatOnly}-${sort}-${sortDir}-${hasPartner}`}
+          key={`${kpiFocus}-${apiStatus}-${debouncedSearch}-${flatOnly}-${sort}-${sortDir}-${hasPartner}-${minCollected}`}
           initial={reduced ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reduced ? undefined : { opacity: 0, y: -4 }}
@@ -617,6 +646,16 @@ export function BookingsListPage() {
                     )}
                   >
                     {inr(r.outstanding)}
+                  </span>
+                ),
+              },
+              {
+                key: "pct",
+                header: "Collected",
+                hideOnMobile: true,
+                cell: (r) => (
+                  <span className="tabular-nums font-medium">
+                    {r.collectionPct}%
                   </span>
                 ),
               },
