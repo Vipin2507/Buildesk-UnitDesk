@@ -9,7 +9,7 @@ import { accessibleProjectIds, assertProjectAccess, requirePermission } from "..
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
 import { audit } from "../lib/audit.ts";
-import { dispatchReminder, notify } from "../lib/notify.ts";
+import { dispatchReminder, notify, processDueReminders } from "../lib/notify.ts";
 import { recomputeCustomerCollection } from "../lib/schedule.ts";
 
 export const opsRouter = Router();
@@ -242,6 +242,16 @@ opsRouter.post(
       },
     });
     res.status(201).json(created);
+  }),
+);
+
+opsRouter.post(
+  "/reminders/process-due",
+  asyncHandler(async (req, res) => {
+    const user = requireUser(req);
+    requirePermission(user, "edit");
+    const result = await processDueReminders();
+    res.json({ ok: true, ...result });
   }),
 );
 

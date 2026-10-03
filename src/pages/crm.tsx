@@ -60,9 +60,23 @@ export function CrmPage() {
     mutationFn: (id: string) => api.post(`/api/reminders/${id}/send`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["reminders"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
       toast.success("Dispatched via configured channel");
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Send failed"),
+  });
+  const syncDue = useMutation({
+    mutationFn: () => api.post<{ processed: number; sent: number }>("/api/reminders/process-due"),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["reminders"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast.success(
+        res.sent
+          ? `Synced ${res.sent} due reminder(s) to notifications`
+          : "No due reminders to sync",
+      );
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Sync failed"),
   });
 
   return (
@@ -71,6 +85,11 @@ export function CrmPage() {
         title="CRM activities"
         subtitle="Payment due (from installment dates), KYC and follow-up reminders"
         breadcrumbs={projectId ? [{ label: "Project", to: `/projects/${projectId}` }, { label: "CRM" }] : undefined}
+        actions={
+          <Button size="sm" variant="outline" disabled={syncDue.isPending} onClick={() => syncDue.mutate()}>
+            {syncDue.isPending ? "Syncing…" : "Sync due notifications"}
+          </Button>
+        }
       />
       <CardSoft className="max-w-2xl space-y-2.5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">New reminder</p>

@@ -21,6 +21,7 @@ import { integrationsRouter } from "./routes/integrations.ts";
 import { marketingRouter } from "./routes/marketing.ts";
 import { partnerAuthRouter, partnerPortalRouter, partnerRequired } from "./routes/partner.ts";
 import { bootstrapPhase2 } from "./lib/bootstrap.ts";
+import { startReminderScheduler } from "./lib/notify.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -82,6 +83,7 @@ app.use(errorHandler);
 bootstrapPhase2()
   .catch((err) => console.error("phase2 bootstrap", err))
   .finally(() => {
+    startReminderScheduler(60_000);
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`UnitDesk on http://0.0.0.0:${PORT}`);
     });

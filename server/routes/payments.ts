@@ -13,7 +13,7 @@ import {
 } from "../lib/schedule.ts";
 import { issueDocument } from "../lib/invoice.ts";
 import { audit } from "../lib/audit.ts";
-import { notify } from "../lib/notify.ts";
+import { notifyProjectStaff, syncPaymentDueReminderStatuses } from "../lib/notify.ts";
 
 export const paymentsRouter = Router();
 
@@ -360,14 +360,20 @@ paymentsRouter.post(
       projectId: booking.projectId,
       meta: { amount: payment.amount, appliesTo: payment.appliesTo },
     });
-    await notify({
-      title: "Payment recorded",
-      body: `₹${body.amount.toLocaleString("en-IN")} posted on booking`,
-      type: "payment",
-      employeeId: user.id,
-      partnerId: body.appliesTo === "partner" ? booking.channelPartnerId : null,
-      linkUrl: `/bookings/${booking.id}`,
-    });
+    if (body.appliesTo === "customer" && (body.status ?? "received") !== "pending") {
+      await syncPaymentDueReminderStatuses(body.bookingId);
+    }
+    await notifyProjectStaff(
+      booking.projectId,
+      {
+        title: "Payment recorded",
+        body: `₹${body.amount.toLocaleString("en-IN")} posted on ${booking.bookingNumber}`,
+        type: "payment",
+        partnerId: body.appliesTo === "partner" ? booking.channelPartnerId : null,
+        linkUrl: `/bookings/${booking.id}`,
+      },
+      [user.id, booking.salesEmployeeId],
+    );
     res.status(201).json(payment);
   }),
 );
@@ -455,6 +461,9 @@ paymentsRouter.patch(
       projectId: existing.booking.projectId,
       meta: body,
     });
+    if (updated.appliesTo === "customer" && updated.status !== "pending") {
+      await syncPaymentDueReminderStatuses(updated.bookingId);
+    }
     res.json(updated);
   }),
 );
@@ -481,6 +490,9 @@ paymentsRouter.patch(
       }
       return payment;
     });
+    if (updated.appliesTo === "customer" && updated.status !== "pending") {
+      await syncPaymentDueReminderStatuses(existing.bookingId);
+    }
     res.json(updated);
   }),
 );
@@ -507,6 +519,9 @@ paymentsRouter.delete(
         await recomputeCustomerCollection(tx, existing.bookingId);
       }
     });
+    if (existing.appliesTo === "customer") {
+      await syncPaymentDueReminderStatuses(existing.bookingId);
+    }
 
     await audit({
       actorId: user.id,

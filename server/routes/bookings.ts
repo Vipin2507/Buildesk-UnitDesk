@@ -15,7 +15,7 @@ import {
 } from "../lib/schedule.ts";
 import { issueDocument } from "../lib/invoice.ts";
 import { audit } from "../lib/audit.ts";
-import { notify } from "../lib/notify.ts";
+import { notify, notifyProjectStaff, processDueReminders } from "../lib/notify.ts";
 
 export const bookingsRouter = Router();
 
@@ -398,13 +398,22 @@ bookingsRouter.post(
       meta: { bookingNumber: result.bookingNumber },
     });
     const installmentCount = result.schedules?.length ?? 0;
-    await notify({
-      title: `Booking ${result.bookingNumber}`,
-      body: `Unit booked. ${installmentCount} installment(s) scheduled with payment reminders.`,
-      type: "booking",
-      employeeId: user.id,
-      linkUrl: `/bookings/${result.id}`,
-    });
+    const nextDue = result.schedules?.[0];
+    await notifyProjectStaff(
+      result.projectId,
+      {
+        title: `Booking ${result.bookingNumber}`,
+        body: nextDue
+          ? `Unit booked · ${installmentCount} installment(s). Next: ${nextDue.name} on ${new Date(nextDue.dueDate).toLocaleDateString("en-IN")} (₹${Number(nextDue.amount).toLocaleString("en-IN")}).`
+          : `Unit booked · ${installmentCount} installment(s) scheduled.`,
+        type: "booking",
+        linkUrl: `/bookings/${result.id}`,
+      },
+      [user.id, result.salesEmployeeId],
+    );
+
+    // Fire any installment reminders already due (afterDays = 0 / past dates)
+    await processDueReminders();
 
     res.status(201).json(result);
   }),
