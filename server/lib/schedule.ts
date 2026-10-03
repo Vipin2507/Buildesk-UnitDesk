@@ -5,6 +5,7 @@ type Tx = {
     createMany: Function;
     findMany: Function;
     update: Function;
+    updateMany: Function;
     deleteMany: Function;
   };
   payment: {
@@ -13,6 +14,16 @@ type Tx = {
   booking: {
     findUnique: Function;
   };
+  reminder?: {
+    createMany: Function;
+    deleteMany: Function;
+  };
+};
+
+export type InstallmentInput = {
+  name: string;
+  afterDays: number;
+  amount: number;
 };
 
 export function collectableAmount(
@@ -25,6 +36,12 @@ export function collectableAmount(
   const total = financials.totalCost ?? 0;
   const finance = financials.finance ?? 0;
   return round2(Math.max(0, total - finance));
+}
+
+export function addDays(d: Date, n: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
 }
 
 export async function generateSchedules(
@@ -43,22 +60,18 @@ export async function generateSchedules(
   const thirds = round2(rest / 3);
   const last = round2(rest - thirds * 2);
   const start = new Date(booking.bookingDate);
-  const addDays = (d: Date, n: number) => {
-    const x = new Date(d);
-    x.setDate(x.getDate() + n);
-    return x;
-  };
   const rows = [
-    { name: "Booking amount", dueDate: start, amount: bookingAmt, sortOrder: 1 },
-    { name: "Slab 1 — 10%", dueDate: addDays(start, 90), amount: thirds, sortOrder: 2 },
-    { name: "Slab 2 — 40%", dueDate: addDays(start, 180), amount: thirds, sortOrder: 3 },
-    { name: "Possession — balance", dueDate: addDays(start, 270), amount: last, sortOrder: 4 },
+    { name: "Booking amount", afterDays: 0, dueDate: start, amount: bookingAmt, sortOrder: 1 },
+    { name: "Slab 1 — 10%", afterDays: 90, dueDate: addDays(start, 90), amount: thirds, sortOrder: 2 },
+    { name: "Slab 2 — 40%", afterDays: 180, dueDate: addDays(start, 180), amount: thirds, sortOrder: 3 },
+    { name: "Possession — balance", afterDays: 270, dueDate: addDays(start, 270), amount: last, sortOrder: 4 },
   ].filter((r) => r.amount > 0);
 
   await tx.paymentSchedule.createMany({
     data: rows.map((r) => ({
       bookingId: booking.id,
       name: r.name,
+      afterDays: r.afterDays,
       dueDate: r.dueDate,
       amount: r.amount,
       received: 0,
@@ -66,6 +79,96 @@ export async function generateSchedules(
       status: "pending",
       sortOrder: r.sortOrder,
     })),
+  });
+}
+
+/** Create custom installment schedule from booking form (days after booking date). */
+export async function createInstallmentSchedules(
+  tx: Tx,
+  booking: {
+    id: string;
+    bookingDate: Date;
+    financials: { totalCost: number; valueToBeCollected: number; finance: number } | null;
+  },
+  installments: InstallmentInput[],
+) {
+  const collect = collectableAmount(booking.financials);
+  const cleaned = installments
+    .map((row, i) => ({
+      name: (row.name || `Installment ${i + 1}`).trim(),
+      afterDays: Math.max(0, Math.round(Number(row.afterDays) || 0)),
+      amount: round2(Number(row.amount) || 0),
+      sortOrder: i + 1,
+    }))
+    .filter((r) => r.amount > 0);
+
+  if (!cleaned.length) {
+    await generateSchedules(tx, booking);
+    return;
+  }
+
+  const sum = round2(cleaned.reduce((s, r) => s + r.amount, 0));
+  if (collect > 0 && Math.abs(sum - collect) > 1) {
+    throw new Error(
+      `Installment total ₹${sum.toLocaleString("en-IN")} must equal value to be collected ₹${collect.toLocaleString("en-IN")}`,
+    );
+  }
+
+  const start = new Date(booking.bookingDate);
+  await tx.paymentSchedule.createMany({
+    data: cleaned.map((r) => ({
+      bookingId: booking.id,
+      name: r.name,
+      afterDays: r.afterDays,
+      dueDate: addDays(start, r.afterDays),
+      amount: r.amount,
+      received: 0,
+      outstanding: r.amount,
+      status: "pending",
+      sortOrder: r.sortOrder,
+    })),
+  });
+}
+
+/** Schedule payment_due reminders for each installment due date. */
+export async function syncInstallmentReminders(
+  tx: Tx,
+  input: {
+    bookingId: string;
+    projectId: string;
+    bookingNumber: string;
+    customerName?: string | null;
+  },
+) {
+  if (!tx.reminder) return;
+
+  const schedules = await tx.paymentSchedule.findMany({
+    where: { bookingId: input.bookingId },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  await tx.reminder.deleteMany({
+    where: { bookingId: input.bookingId, type: "payment_due" },
+  });
+
+  if (!schedules.length) return;
+
+  const customer = input.customerName?.trim() || "customer";
+  await tx.reminder.createMany({
+    data: schedules.map(
+      (s: { name: string; dueDate: Date; amount: number; afterDays: number | null }) => ({
+        bookingId: input.bookingId,
+        projectId: input.projectId,
+        type: "payment_due",
+        channel: "in_app",
+        title: `${s.name} due — ${input.bookingNumber}`,
+        message: `${s.name} of ₹${Number(s.amount).toLocaleString("en-IN")} for ${customer} on ${input.bookingNumber} is due${
+          s.afterDays != null ? ` (${s.afterDays} days after booking)` : ""
+        }.`,
+        dueAt: s.dueDate,
+        status: "scheduled",
+      }),
+    ),
   });
 }
 
@@ -91,7 +194,7 @@ export async function applyCustomerPayment(tx: Tx, bookingId: string, amount: nu
   }
 }
 
-/** Rebuild demand schedule from value-to-be-collected, then re-apply customer payments. */
+/** Re-apply customer payments onto existing installment rows (preserves custom breakup). */
 export async function recomputeCustomerCollection(tx: Tx, bookingId: string) {
   const booking = await tx.booking.findUnique({
     where: { id: bookingId },
@@ -99,8 +202,25 @@ export async function recomputeCustomerCollection(tx: Tx, bookingId: string) {
   });
   if (!booking) return;
 
-  await tx.paymentSchedule.deleteMany({ where: { bookingId } });
-  await generateSchedules(tx, booking);
+  const existing = await tx.paymentSchedule.findMany({
+    where: { bookingId },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  if (existing.length) {
+    for (const row of existing) {
+      await tx.paymentSchedule.update({
+        where: { id: row.id },
+        data: {
+          received: 0,
+          outstanding: row.amount,
+          status: "pending",
+        },
+      });
+    }
+  } else {
+    await generateSchedules(tx, booking);
+  }
 
   const payments = await tx.payment.findMany({
     where: {

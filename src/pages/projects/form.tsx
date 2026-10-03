@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CardSoft } from "@/components/shared/card-soft";
@@ -11,10 +12,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, ApiError, type ListResponse } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { DEFAULT_PROJECT_PHOTO } from "@/lib/project-photo";
 import { qk } from "@/lib/query-keys";
 import { systemUnitPlanUrl } from "@/lib/unit-plans";
 import { useProjectContextStore } from "@/stores/project-context";
+
+type Milestone = {
+  collectionPct: string;
+  brokeragePct: string;
+};
 
 type Form = {
   companyId: string;
@@ -35,6 +42,10 @@ type Form = {
   plan1bhkUrl: string | null;
   plan2bhkUrl: string | null;
   plan3bhkUrl: string | null;
+  mandateTerm: string;
+  agreedMandateBrokerage: string;
+  totalBrokeragePct: string;
+  mandateBrokeragePaymentTerm: string;
 };
 
 const empty: Form = {
@@ -56,7 +67,24 @@ const empty: Form = {
   plan1bhkUrl: null,
   plan2bhkUrl: null,
   plan3bhkUrl: null,
+  mandateTerm: "",
+  agreedMandateBrokerage: "4",
+  totalBrokeragePct: "",
+  mandateBrokeragePaymentTerm: "",
 };
+
+const defaultMilestones = (): Milestone[] => [
+  { collectionPct: "5", brokeragePct: "1" },
+  { collectionPct: "20", brokeragePct: "2" },
+  { collectionPct: "30", brokeragePct: "1" },
+];
+
+function numOrNull(v: string) {
+  const t = v.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isNaN(n) ? null : n;
+}
 
 export function ProjectFormPage() {
   const { companyId, id } = useParams();
@@ -65,6 +93,7 @@ export function ProjectFormPage() {
   const qc = useQueryClient();
   const setProject = useProjectContextStore((s) => s.setProject);
   const [form, setForm] = useState<Form>({ ...empty, companyId: companyId ?? "" });
+  const [milestones, setMilestones] = useState<Milestone[]>(defaultMilestones());
 
   const { data: companies } = useQuery({
     queryKey: qk.companies,
@@ -74,7 +103,13 @@ export function ProjectFormPage() {
 
   const { data } = useQuery({
     queryKey: id ? qk.project(id) : ["new-project"],
-    queryFn: () => api.get<Form & { companyId: string }>(`/api/projects/${id}`),
+    queryFn: () =>
+      api.get<
+        Form & {
+          companyId: string;
+          brokerageMilestones?: { collectionPct: number; brokeragePct: number; sortOrder: number }[];
+        }
+      >(`/api/projects/${id}`),
     enabled: isEdit,
   });
 
@@ -94,8 +129,39 @@ export function ProjectFormPage() {
       plan1bhkUrl: (data as Form).plan1bhkUrl ?? null,
       plan2bhkUrl: (data as Form).plan2bhkUrl ?? null,
       plan3bhkUrl: (data as Form).plan3bhkUrl ?? null,
+      mandateTerm: data.mandateTerm ?? "",
+      agreedMandateBrokerage:
+        data.agreedMandateBrokerage != null ? String(data.agreedMandateBrokerage) : "",
+      totalBrokeragePct: data.totalBrokeragePct != null ? String(data.totalBrokeragePct) : "",
+      mandateBrokeragePaymentTerm: data.mandateBrokeragePaymentTerm ?? "",
     });
+    if (data.brokerageMilestones?.length) {
+      setMilestones(
+        data.brokerageMilestones.map((m) => ({
+          collectionPct: String(m.collectionPct),
+          brokeragePct: String(m.brokeragePct),
+        })),
+      );
+    } else {
+      setMilestones([]);
+    }
   }, [data]);
+
+  const milestoneSum = useMemo(
+    () =>
+      milestones.reduce((s, m) => {
+        const n = Number(m.brokeragePct);
+        return s + (Number.isNaN(n) ? 0 : n);
+      }, 0),
+    [milestones],
+  );
+
+  const agreedNum = Number(form.agreedMandateBrokerage);
+  const milestoneMismatch =
+    form.agreedMandateBrokerage.trim() !== "" &&
+    !Number.isNaN(agreedNum) &&
+    milestones.length > 0 &&
+    Math.abs(milestoneSum - agreedNum) > 0.05;
 
   const save = useMutation({
     mutationFn: () => {
@@ -104,6 +170,17 @@ export function ProjectFormPage() {
         reraDate: form.reraDate || null,
         expectedCompletion: form.expectedCompletion || null,
         launchDate: form.launchDate || null,
+        mandateTerm: form.mandateTerm || null,
+        agreedMandateBrokerage: numOrNull(form.agreedMandateBrokerage),
+        totalBrokeragePct: milestoneSum || numOrNull(form.totalBrokeragePct),
+        mandateBrokeragePaymentTerm: form.mandateBrokeragePaymentTerm || null,
+        brokerageMilestones: milestones
+          .map((m, i) => ({
+            collectionPct: Number(m.collectionPct),
+            brokeragePct: Number(m.brokeragePct),
+            sortOrder: i,
+          }))
+          .filter((m) => !Number.isNaN(m.collectionPct) && !Number.isNaN(m.brokeragePct)),
       };
       if (isEdit) return api.patch<{ id: string; companyId?: string }>(`/api/projects/${id}`, payload);
       const cid = companyId || form.companyId;
@@ -112,6 +189,7 @@ export function ProjectFormPage() {
     },
     onSuccess: (res: { id: string; companyId?: string }) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["commission-rules"] });
       toast.success(isEdit ? "Project updated" : "Project created");
       const pid = isEdit ? id! : res.id;
       const cid = companyId ?? res.companyId ?? form.companyId;
@@ -124,11 +202,15 @@ export function ProjectFormPage() {
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
   const preview = form.totalWings * form.totalFloors * form.unitsPerFloor;
 
+  function updateMilestone(i: number, key: keyof Milestone, value: string) {
+    setMilestones((rows) => rows.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
+  }
+
   return (
     <PageWrap>
       <PageHeader
         title={isEdit ? "Edit project" : "Create project"}
-        subtitle="Details, photo and inventory shape"
+        subtitle="Details, mandate brokerage schedule and inventory shape"
         breadcrumbs={[
           { label: "Companies", to: "/companies" },
           { label: isEdit ? "Project" : "New project" },
@@ -139,6 +221,10 @@ export function ProjectFormPage() {
           className="grid gap-2.5 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
+            if (milestoneMismatch) {
+              toast.error("Milestone brokerage % must add up to agreed mandate brokerage");
+              return;
+            }
             save.mutate();
           }}
         >
@@ -260,6 +346,138 @@ export function ProjectFormPage() {
             <span className="font-semibold tabular-nums text-foreground">{preview}</span> units).
             After save, configure different floors and units per wing in Project setup.
           </p>
+
+          <div className="sm:col-span-2 space-y-3 rounded-lg border p-3">
+            <div>
+              <p className="text-xs font-semibold">Mandate brokerage</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Agreed CP brokerage and when it becomes due as customer collection progresses. Syncs to Masters commission rule and booking partner dues.
+              </p>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              <Field label="Mandate term">
+                <Input
+                  className="h-8"
+                  placeholder="e.g. Till possession / 24 months"
+                  value={form.mandateTerm}
+                  onChange={(e) => set("mandateTerm", e.target.value)}
+                />
+              </Field>
+              <Field label="Agreed mandate brokerage (%)">
+                <Input
+                  className="h-8"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={form.agreedMandateBrokerage}
+                  onChange={(e) => set("agreedMandateBrokerage", e.target.value)}
+                />
+              </Field>
+              <Field label="Total % of brokerage">
+                <Input
+                  className="h-8"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={milestones.length ? String(milestoneSum) : form.totalBrokeragePct}
+                  readOnly={milestones.length > 0}
+                  onChange={(e) => set("totalBrokeragePct", e.target.value)}
+                />
+              </Field>
+              <Field label="Mandate brokerage payment term">
+                <Input
+                  className="h-8"
+                  placeholder="e.g. As per collection milestones"
+                  value={form.mandateBrokeragePaymentTerm}
+                  onChange={(e) => set("mandateBrokeragePaymentTerm", e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold">Dynamic form — brokerage due schedule</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    When X% of payment collection is done, Y% of brokerage becomes due.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0"
+                  onClick={() => setMilestones((m) => [...m, { collectionPct: "", brokeragePct: "" }])}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add row
+                </Button>
+              </div>
+
+              <div className="overflow-hidden rounded-md border">
+                <div className="grid grid-cols-[1fr_1fr_auto] gap-2 border-b bg-muted/50 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>% of payment collection done</span>
+                  <span>% of brokerage due</span>
+                  <span className="w-8" />
+                </div>
+                {milestones.length === 0 ? (
+                  <p className="px-2 py-3 text-xs text-muted-foreground">
+                    No milestones. Full agreed brokerage is treated as due once booked (or add rows).
+                  </p>
+                ) : (
+                  milestones.map((m, i) => (
+                    <div
+                      key={i}
+                      className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 border-t px-2 py-1.5 first:border-t-0"
+                    >
+                      <Input
+                        className="h-8"
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        max={100}
+                        placeholder="e.g. 5"
+                        value={m.collectionPct}
+                        onChange={(e) => updateMilestone(i, "collectionPct", e.target.value)}
+                      />
+                      <Input
+                        className="h-8"
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        max={100}
+                        placeholder="e.g. 1"
+                        value={m.brokeragePct}
+                        onChange={(e) => updateMilestone(i, "brokeragePct", e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setMilestones((rows) => rows.filter((_, idx) => idx !== i))}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <p
+                className={cn(
+                  "text-[11px]",
+                  milestoneMismatch ? "font-medium text-destructive" : "text-muted-foreground",
+                )}
+              >
+                Milestone total: <span className="tabular-nums font-semibold">{milestoneSum}%</span>
+                {form.agreedMandateBrokerage.trim()
+                  ? ` · Agreed: ${form.agreedMandateBrokerage}%`
+                  : ""}
+                {milestoneMismatch ? " — must match agreed mandate brokerage" : ""}
+              </p>
+            </div>
+          </div>
+
           <div className="sm:col-span-2 flex justify-end gap-1.5">
             <Button type="button" variant="outline" size="sm" onClick={() => navigate(-1)}>Cancel</Button>
             <Button type="submit" size="sm" disabled={save.isPending}>Save project</Button>

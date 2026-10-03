@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
 import { accessibleProjectIds, assertProjectAccess, grantDefaultAccessOnProjectCreate, requirePermission } from "../lib/access.ts";
+import { projectMandateFields, syncProjectMandate } from "../lib/project-mandate.ts";
 import { defaultsForUnitType, formatUnitNumber } from "../lib/units.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
@@ -28,6 +29,7 @@ const projectSchema = z.object({
   plan2bhkUrl: z.string().optional().nullable(),
   plan3bhkUrl: z.string().optional().nullable(),
   numberFormat: z.string().optional(),
+  ...projectMandateFields,
 });
 
 const generateSchema = z.object({
@@ -104,17 +106,35 @@ projectsRouter.post(
     const user = requireUser(req);
     requirePermission(user, "add");
     const body = req.body as z.infer<typeof projectSchema>;
-    const created = await prisma.project.create({
-      data: {
-        ...body,
-        companyId: String(req.params.companyId),
-        code: body.code.toUpperCase(),
-        reraDate: body.reraDate ? new Date(body.reraDate) : null,
-        expectedCompletion: body.expectedCompletion ? new Date(body.expectedCompletion) : null,
-        launchDate: body.launchDate ? new Date(body.launchDate) : null,
-        totalUnits:
-          (body.totalWings ?? 0) * (body.totalFloors ?? 0) * (body.unitsPerFloor ?? 0),
-      },
+    const { brokerageMilestones, ...projectBody } = body;
+    const created = await prisma.$transaction(async (tx) => {
+      const project = await tx.project.create({
+        data: {
+          ...projectBody,
+          companyId: String(req.params.companyId),
+          code: body.code.toUpperCase(),
+          reraDate: body.reraDate ? new Date(body.reraDate) : null,
+          expectedCompletion: body.expectedCompletion ? new Date(body.expectedCompletion) : null,
+          launchDate: body.launchDate ? new Date(body.launchDate) : null,
+          totalUnits:
+            (body.totalWings ?? 0) * (body.totalFloors ?? 0) * (body.unitsPerFloor ?? 0),
+        },
+      });
+      const synced = await syncProjectMandate(tx, project.id, {
+        agreedMandateBrokerage: body.agreedMandateBrokerage,
+        brokerageMilestones,
+      });
+      if (synced.totalBrokeragePct != null) {
+        return tx.project.update({
+          where: { id: project.id },
+          data: { totalBrokeragePct: synced.totalBrokeragePct },
+          include: { brokerageMilestones: { orderBy: { sortOrder: "asc" } } },
+        });
+      }
+      return tx.project.findUniqueOrThrow({
+        where: { id: project.id },
+        include: { brokerageMilestones: { orderBy: { sortOrder: "asc" } } },
+      });
     });
     await grantDefaultAccessOnProjectCreate(created.id, user.id);
     res.status(201).json(created);
@@ -141,6 +161,7 @@ projectsRouter.get(
           },
         },
         commissionRules: { where: { active: true } },
+        brokerageMilestones: { orderBy: { sortOrder: "asc" } },
       },
     });
     if (!project) throw new HttpError(404, "Project not found");
@@ -154,21 +175,44 @@ projectsRouter.patch(
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     requirePermission(user, "edit");
-    await assertProjectAccess(user, String(req.params.id));
+    const projectId = String(req.params.id);
+    await assertProjectAccess(user, projectId);
     const body = req.body as Partial<z.infer<typeof projectSchema>>;
-    const updated = await prisma.project.update({
-      where: { id: String(req.params.id) },
-      data: {
-        ...body,
-        reraDate: body.reraDate === undefined ? undefined : body.reraDate ? new Date(body.reraDate) : null,
-        expectedCompletion:
-          body.expectedCompletion === undefined
-            ? undefined
-            : body.expectedCompletion
-              ? new Date(body.expectedCompletion)
-              : null,
-        launchDate: body.launchDate === undefined ? undefined : body.launchDate ? new Date(body.launchDate) : null,
-      },
+    const { brokerageMilestones, ...projectBody } = body;
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          ...projectBody,
+          reraDate: body.reraDate === undefined ? undefined : body.reraDate ? new Date(body.reraDate) : null,
+          expectedCompletion:
+            body.expectedCompletion === undefined
+              ? undefined
+              : body.expectedCompletion
+                ? new Date(body.expectedCompletion)
+                : null,
+          launchDate: body.launchDate === undefined ? undefined : body.launchDate ? new Date(body.launchDate) : null,
+        },
+      });
+      if (brokerageMilestones !== undefined || body.agreedMandateBrokerage !== undefined) {
+        const synced = await syncProjectMandate(tx, projectId, {
+          agreedMandateBrokerage: body.agreedMandateBrokerage,
+          brokerageMilestones,
+        });
+        if (synced.totalBrokeragePct != null) {
+          await tx.project.update({
+            where: { id: projectId },
+            data: { totalBrokeragePct: synced.totalBrokeragePct },
+          });
+        }
+      }
+      return tx.project.findUniqueOrThrow({
+        where: { id: projectId },
+        include: {
+          brokerageMilestones: { orderBy: { sortOrder: "asc" } },
+          commissionRules: { where: { active: true } },
+        },
+      });
     });
     res.json(updated);
   }),

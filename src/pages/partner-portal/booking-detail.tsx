@@ -19,7 +19,16 @@ type Booking = {
   customers: { id: string; name: string; mobile: string; role: string }[];
   financials: { totalCost: number; agreement: number } | null;
   entitlement: { entitlementPercent: number | null; entitlementAmount: number; received: number; outstanding: number } | null;
-  schedules: { id: string; name: string; dueDate: string; amount: number; received: number; outstanding: number; status: string }[];
+  schedules: {
+    id: string;
+    name: string;
+    afterDays?: number | null;
+    dueDate: string;
+    amount: number;
+    received: number;
+    outstanding: number;
+    status: string;
+  }[];
   invoices: { id: string; number: string; kind: string; amount: number; issuedAt: string }[];
   documents: { id: string; name: string; category: string; fileUrl: string; createdAt: string }[];
 };
@@ -67,13 +76,19 @@ export function PartnerPortalBookingDetail() {
         </CardSoft>
       </div>
       <CardSoft>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Payment schedule</p>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Installment break up</p>
         <DataTable
           rows={data?.schedules ?? []}
           columns={[
-            { key: "n", header: "Milestone", cell: (r) => r.name },
-            { key: "d", header: "Due", cell: (r) => formatDate(r.dueDate) },
-            { key: "a", header: "Amount", cell: (r) => inr(r.amount) },
+            { key: "n", header: "Installment", cell: (r) => r.name },
+            {
+              key: "days",
+              header: "After days",
+              hideOnMobile: true,
+              cell: (r) => (r.afterDays != null ? `${r.afterDays}` : "—"),
+            },
+            { key: "d", header: "Due date", cell: (r) => formatDate(r.dueDate) },
+            { key: "a", header: "Value", cell: (r) => inr(r.amount) },
             { key: "r", header: "Received", cell: (r) => inr(r.received) },
             { key: "st", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
           ]}

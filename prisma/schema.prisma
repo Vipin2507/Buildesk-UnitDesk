@@ -49,9 +49,14 @@ model Project {
   plan2bhkUrl         String?
   plan3bhkUrl         String?
   numberFormat       String           @default("[Wing]-[Floor][Unit:2]")
+  mandateTerm                  String?
+  agreedMandateBrokerage       Float?
+  totalBrokeragePct            Float?
+  mandateBrokeragePaymentTerm  String?
   wings              Wing[]
   users              ProjectAccess[]
   commissionRules    CommissionRule[]
+  brokerageMilestones BrokerageMilestone[]
   bookings           Booking[]
   documents          Document[]
   leads              Lead[]
@@ -60,6 +65,17 @@ model Project {
   updatedAt          DateTime         @updatedAt
 
   @@unique([companyId, code])
+}
+
+model BrokerageMilestone {
+  id             String  @id @default(cuid())
+  projectId      String
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  collectionPct  Float
+  brokeragePct   Float
+  sortOrder      Int     @default(0)
+
+  @@index([projectId])
 }
 
 model Wing {
@@ -291,6 +307,7 @@ model PaymentSchedule {
   bookingId   String
   booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   name        String
+  afterDays   Int?
   dueDate     DateTime
   amount      Float
   received    Float    @default(0)

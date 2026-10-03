@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { toast } from "sonner";
 import { CardSoft } from "@/components/shared/card-soft";
@@ -21,7 +22,19 @@ type Rule = {
   active: boolean;
 };
 
+type ProjectMandate = {
+  id: string;
+  name: string;
+  mandateTerm: string | null;
+  agreedMandateBrokerage: number | null;
+  totalBrokeragePct: number | null;
+  mandateBrokeragePaymentTerm: string | null;
+  brokerageMilestones: { id: string; collectionPct: number; brokeragePct: number }[];
+  commissionRules: Rule[];
+};
+
 export function MastersPage() {
+  const navigate = useNavigate();
   const projectId = useProjectContextStore((s) => s.projectId);
   const qc = useQueryClient();
   const [type, setType] = useState("percentage");
@@ -32,6 +45,11 @@ export function MastersPage() {
     queryFn: () => api.get<ListResponse<{ id: string; name: string }>>("/api/projects", { pageSize: 50 }),
   });
   const selected = projectId ?? projects?.data[0]?.id ?? "";
+  const { data: project } = useQuery({
+    queryKey: qk.project(selected),
+    queryFn: () => api.get<ProjectMandate>(`/api/projects/${selected}`),
+    enabled: Boolean(selected),
+  });
   const { data: rules } = useQuery({
     queryKey: qk.commissionRules(selected),
     queryFn: () => api.get<ListResponse<Rule>>(`/api/projects/${selected}/commission-rules`),
@@ -55,15 +73,19 @@ export function MastersPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.commissionRules(selected) });
+      qc.invalidateQueries({ queryKey: qk.project(selected) });
       toast.success("Commission rule saved (previous active rule deactivated)");
     },
   });
 
   return (
     <PageWrap>
-      <PageHeader title="Masters" subtitle="Commission rules are per project — never hardcoded" />
+      <PageHeader title="Masters" subtitle="Mandate brokerage & commission rules sync from each project" />
+
       <CardSoft className="max-w-xl space-y-2.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Commission rule engine</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Project mandate brokerage
+        </p>
         <Field label="Project">
           <Select value={selected} onValueChange={(v) => useProjectContextStore.getState().setProject(v)}>
             <SelectTrigger className="h-8"><SelectValue placeholder="Select project" /></SelectTrigger>
@@ -72,6 +94,66 @@ export function MastersPage() {
             </SelectContent>
           </Select>
         </Field>
+        {project ? (
+          <>
+            <div className="grid gap-2 text-xs sm:grid-cols-2">
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Mandate term</p>
+                <p className="font-medium">{project.mandateTerm?.trim() || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Agreed brokerage</p>
+                <p className="font-semibold tabular-nums">
+                  {project.agreedMandateBrokerage != null ? `${project.agreedMandateBrokerage}%` : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Total % of brokerage</p>
+                <p className="font-semibold tabular-nums">
+                  {project.totalBrokeragePct != null ? `${project.totalBrokeragePct}%` : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Payment term</p>
+                <p className="font-medium">{project.mandateBrokeragePaymentTerm?.trim() || "—"}</p>
+              </div>
+            </div>
+            {(project.brokerageMilestones?.length ?? 0) > 0 ? (
+              <div className="overflow-hidden rounded-md border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left font-medium">Collection done</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Brokerage due</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {project.brokerageMilestones.map((m) => (
+                      <tr key={m.id} className="border-t">
+                        <td className="px-2 py-1.5 tabular-nums">{m.collectionPct}%</td>
+                        <td className="px-2 py-1.5 tabular-nums font-medium">{m.brokeragePct}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No collection→brokerage milestones on this project yet.</p>
+            )}
+            <Button size="sm" variant="outline" onClick={() => navigate(`/projects/${selected}/edit`)}>
+              Edit on project
+            </Button>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">Select a project to view mandate details.</p>
+        )}
+      </CardSoft>
+
+      <CardSoft className="max-w-xl space-y-2.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Commission rule engine</p>
+        <p className="text-[11px] text-muted-foreground">
+          Saving a mandate on the project auto-updates the active percentage rule. You can still override here.
+        </p>
         <Field label="Rule name">
           <Input className="h-8" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>

@@ -902,6 +902,19 @@ async function main() {
   const projectIds: string[] = [];
 
   for (const spec of projectSpecs) {
+    const agreedBrokerage = spec.projectType === "Commercial" ? 2 : 4;
+    const milestones =
+      spec.projectType === "Commercial"
+        ? [
+            { collectionPct: 10, brokeragePct: 1, sortOrder: 0 },
+            { collectionPct: 40, brokeragePct: 1, sortOrder: 1 },
+          ]
+        : [
+            { collectionPct: 5, brokeragePct: 1, sortOrder: 0 },
+            { collectionPct: 20, brokeragePct: 2, sortOrder: 1 },
+            { collectionPct: 30, brokeragePct: 1, sortOrder: 2 },
+          ];
+
     const project = await prisma.project.create({
       data: {
         companyId: spec.companyId,
@@ -920,6 +933,11 @@ async function main() {
         launchDate: spec.launchDate,
         expectedCompletion: spec.expectedCompletion,
         numberFormat: spec.numberFormat,
+        mandateTerm: "Till project completion",
+        agreedMandateBrokerage: agreedBrokerage,
+        totalBrokeragePct: agreedBrokerage,
+        mandateBrokeragePaymentTerm: "As per collection milestones",
+        brokerageMilestones: { create: milestones },
       },
     });
     projectIds.push(project.id);
@@ -927,9 +945,9 @@ async function main() {
     const rule = await prisma.commissionRule.create({
       data: {
         projectId: project.id,
-        name: spec.projectType === "Commercial" ? "Commercial CP share" : "Standard CP share",
+        name: "Mandate brokerage",
         type: "percentage",
-        value: spec.projectType === "Commercial" ? 1.75 : 2.5,
+        value: agreedBrokerage,
         active: true,
       },
     });

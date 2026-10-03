@@ -128,6 +128,11 @@ type ProjectExtra = {
   plan1bhkUrl: string | null;
   plan2bhkUrl: string | null;
   plan3bhkUrl: string | null;
+  mandateTerm: string | null;
+  agreedMandateBrokerage: number | null;
+  totalBrokeragePct: number | null;
+  mandateBrokeragePaymentTerm: string | null;
+  brokerageMilestones: { id: string; collectionPct: number; brokeragePct: number; sortOrder: number }[];
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -279,7 +284,14 @@ export function ProjectOverviewPage() {
   });
   const { data: project } = useQuery({
     queryKey: qk.project(id!),
-    queryFn: () => api.get<ProjectExtra & { id: string; name: string; company: { id: string; name: string } }>(`/api/projects/${id}`),
+    queryFn: () =>
+      api.get<
+        ProjectExtra & {
+          id: string;
+          name: string;
+          company: { id: string; name: string };
+        }
+      >(`/api/projects/${id}`),
     enabled: Boolean(id),
   });
 
@@ -367,6 +379,57 @@ export function ProjectOverviewPage() {
           </div>
         </div>
       </CardSoft>
+
+      {project?.agreedMandateBrokerage != null || (project?.brokerageMilestones?.length ?? 0) > 0 ? (
+        <CardSoft className="space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Mandate brokerage
+            </p>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${id}/edit`)}>
+              Edit mandate
+            </Button>
+          </div>
+          <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-[10px] uppercase text-muted-foreground">Mandate term</p>
+              <p className="font-medium">{project?.mandateTerm?.trim() || "—"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-muted-foreground">Agreed brokerage</p>
+              <p className="font-semibold tabular-nums">{project?.agreedMandateBrokerage ?? "—"}%</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-muted-foreground">Total % of brokerage</p>
+              <p className="font-semibold tabular-nums">{project?.totalBrokeragePct ?? "—"}%</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-muted-foreground">Payment term</p>
+              <p className="font-medium">{project?.mandateBrokeragePaymentTerm?.trim() || "—"}</p>
+            </div>
+          </div>
+          {(project?.brokerageMilestones?.length ?? 0) > 0 ? (
+            <div className="overflow-hidden rounded-md border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-medium">Payment collection done</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Brokerage due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {project!.brokerageMilestones.map((m) => (
+                    <tr key={m.id} className="border-t">
+                      <td className="px-2 py-1.5 tabular-nums">{m.collectionPct}%</td>
+                      <td className="px-2 py-1.5 tabular-nums font-medium">{m.brokeragePct}% of brokerage</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </CardSoft>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-2 xl:grid-cols-6">
         <MetricCard

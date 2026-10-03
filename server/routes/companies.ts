@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
 import { accessibleProjectIds, grantDefaultAccessOnProjectCreate, requirePermission } from "../lib/access.ts";
+import { projectMandateFields, syncProjectMandate } from "../lib/project-mandate.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
 
@@ -118,64 +119,64 @@ companiesRouter.get(
   }),
 );
 
+const companyProjectSchema = z.object({
+  name: z.string().min(2),
+  code: z.string().min(2),
+  location: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  reraNumber: z.string().optional().nullable(),
+  reraDate: z.string().optional().nullable(),
+  projectType: z.string().optional().nullable(),
+  totalWings: z.number().int().min(0).optional(),
+  totalFloors: z.number().int().min(0).optional(),
+  unitsPerFloor: z.number().int().min(0).optional(),
+  status: z.enum(["active", "upcoming", "completed", "inactive"]).optional(),
+  expectedCompletion: z.string().optional().nullable(),
+  launchDate: z.string().optional().nullable(),
+  photoUrl: z.string().optional().nullable(),
+  plan1bhkUrl: z.string().optional().nullable(),
+  plan2bhkUrl: z.string().optional().nullable(),
+  plan3bhkUrl: z.string().optional().nullable(),
+  numberFormat: z.string().optional(),
+  ...projectMandateFields,
+});
+
 companiesRouter.post(
   "/:id/projects",
-  validate(
-    z.object({
-      name: z.string().min(2),
-      code: z.string().min(2),
-      location: z.string().optional().nullable(),
-      address: z.string().optional().nullable(),
-      reraNumber: z.string().optional().nullable(),
-      reraDate: z.string().optional().nullable(),
-      projectType: z.string().optional().nullable(),
-      totalWings: z.number().int().min(0).optional(),
-      totalFloors: z.number().int().min(0).optional(),
-      unitsPerFloor: z.number().int().min(0).optional(),
-      status: z.enum(["active", "upcoming", "completed", "inactive"]).optional(),
-      expectedCompletion: z.string().optional().nullable(),
-      launchDate: z.string().optional().nullable(),
-      photoUrl: z.string().optional().nullable(),
-      plan1bhkUrl: z.string().optional().nullable(),
-      plan2bhkUrl: z.string().optional().nullable(),
-      plan3bhkUrl: z.string().optional().nullable(),
-      numberFormat: z.string().optional(),
-    }),
-  ),
+  validate(companyProjectSchema),
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     requirePermission(user, "add");
-    const body = req.body as {
-      name: string;
-      code: string;
-      location?: string | null;
-      address?: string | null;
-      reraNumber?: string | null;
-      reraDate?: string | null;
-      projectType?: string | null;
-      totalWings?: number;
-      totalFloors?: number;
-      unitsPerFloor?: number;
-      status?: string;
-      expectedCompletion?: string | null;
-      launchDate?: string | null;
-      photoUrl?: string | null;
-      plan1bhkUrl?: string | null;
-      plan2bhkUrl?: string | null;
-      plan3bhkUrl?: string | null;
-      numberFormat?: string;
-    };
-    const created = await prisma.project.create({
-      data: {
-        ...body,
-        companyId: String(req.params.id),
-        code: body.code.toUpperCase(),
-        reraDate: body.reraDate ? new Date(body.reraDate) : null,
-        expectedCompletion: body.expectedCompletion ? new Date(body.expectedCompletion) : null,
-        launchDate: body.launchDate ? new Date(body.launchDate) : null,
-        totalUnits:
-          (body.totalWings ?? 0) * (body.totalFloors ?? 0) * (body.unitsPerFloor ?? 0),
-      },
+    const body = req.body as z.infer<typeof companyProjectSchema>;
+    const { brokerageMilestones, ...projectBody } = body;
+    const created = await prisma.$transaction(async (tx) => {
+      const project = await tx.project.create({
+        data: {
+          ...projectBody,
+          companyId: String(req.params.id),
+          code: body.code.toUpperCase(),
+          reraDate: body.reraDate ? new Date(body.reraDate) : null,
+          expectedCompletion: body.expectedCompletion ? new Date(body.expectedCompletion) : null,
+          launchDate: body.launchDate ? new Date(body.launchDate) : null,
+          totalUnits:
+            (body.totalWings ?? 0) * (body.totalFloors ?? 0) * (body.unitsPerFloor ?? 0),
+        },
+      });
+      const synced = await syncProjectMandate(tx, project.id, {
+        agreedMandateBrokerage: body.agreedMandateBrokerage,
+        brokerageMilestones,
+      });
+      if (synced.totalBrokeragePct != null) {
+        return tx.project.update({
+          where: { id: project.id },
+          data: { totalBrokeragePct: synced.totalBrokeragePct },
+          include: { brokerageMilestones: { orderBy: { sortOrder: "asc" } } },
+        });
+      }
+      return tx.project.findUniqueOrThrow({
+        where: { id: project.id },
+        include: { brokerageMilestones: { orderBy: { sortOrder: "asc" } } },
+      });
     });
     await grantDefaultAccessOnProjectCreate(created.id, user.id);
     res.status(201).json(created);

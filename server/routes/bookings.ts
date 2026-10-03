@@ -6,7 +6,13 @@ import { accessibleProjectIds, assertProjectAccess, requirePermission } from "..
 import { computeEntitlement, round2 } from "../lib/commission.ts";
 import { requireUser } from "../middleware/auth.ts";
 import { validate } from "../middleware/validate.ts";
-import { collectableAmount, generateSchedules } from "../lib/schedule.ts";
+import { brokerageDueAmount, unlockedBrokeragePct } from "../lib/project-mandate.ts";
+import {
+  collectableAmount,
+  createInstallmentSchedules,
+  generateSchedules,
+  syncInstallmentReminders,
+} from "../lib/schedule.ts";
 import { issueDocument } from "../lib/invoice.ts";
 import { audit } from "../lib/audit.ts";
 import { notify } from "../lib/notify.ts";
@@ -35,6 +41,12 @@ const financialSchema = z.object({
   finance: z.number().optional(),
 });
 
+const installmentSchema = z.object({
+  name: z.string().min(1),
+  afterDays: z.number().int().min(0),
+  amount: z.number().positive(),
+});
+
 const bookingSchema = z.object({
   bookingDate: z.string(),
   projectId: z.string(),
@@ -45,6 +57,7 @@ const bookingSchema = z.object({
   remarks: z.string().optional().nullable(),
   customers: z.array(customerSchema).min(1),
   financials: financialSchema,
+  installments: z.array(installmentSchema).optional(),
 });
 
 async function nextBookingNumber() {
@@ -324,7 +337,23 @@ bookingsRouter.post(
         where: { id: booking.id },
         include: { financials: true, customers: true },
       });
-      await generateSchedules(tx, full);
+      try {
+        if (body.installments?.length) {
+          await createInstallmentSchedules(tx, full, body.installments);
+        } else {
+          await generateSchedules(tx, full);
+        }
+      } catch (err) {
+        throw new HttpError(422, err instanceof Error ? err.message : "Invalid installment breakup", {
+          installments: [err instanceof Error ? err.message : "Invalid installment breakup"],
+        });
+      }
+      await syncInstallmentReminders(tx, {
+        bookingId: booking.id,
+        projectId: body.projectId,
+        bookingNumber: full.bookingNumber,
+        customerName: full.customers.find((c) => c.role === "primary")?.name ?? full.customers[0]?.name,
+      });
       await issueDocument(tx, {
         bookingId: booking.id,
         kind: "invoice",
@@ -352,8 +381,9 @@ bookingsRouter.post(
           entitlement: true,
           unit: true,
           channelPartner: true,
-          schedules: true,
+          schedules: { orderBy: { sortOrder: "asc" } },
           invoices: true,
+          reminders: { orderBy: { dueAt: "asc" } },
         },
       });
     });
@@ -367,9 +397,10 @@ bookingsRouter.post(
       projectId: result.projectId,
       meta: { bookingNumber: result.bookingNumber },
     });
+    const installmentCount = result.schedules?.length ?? 0;
     await notify({
       title: `Booking ${result.bookingNumber}`,
-      body: `Unit booked. Schedule and invoice generated.`,
+      body: `Unit booked. ${installmentCount} installment(s) scheduled with payment reminders.`,
       type: "booking",
       employeeId: user.id,
       linkUrl: `/bookings/${result.id}`,
@@ -401,12 +432,18 @@ bookingsRouter.post(
     requirePermission(user, "edit");
     const booking = await prisma.booking.findUnique({
       where: { id: String(req.params.id) },
-      include: { financials: true, schedules: true },
+      include: { financials: true, schedules: true, customers: true },
     });
     if (!booking) throw new HttpError(404, "Booking not found");
     await assertProjectAccess(user, booking.projectId);
     if (booking.schedules.length) throw new HttpError(409, "Schedule already exists");
     await generateSchedules(prisma, booking);
+    await syncInstallmentReminders(prisma, {
+      bookingId: booking.id,
+      projectId: booking.projectId,
+      bookingNumber: booking.bookingNumber,
+      customerName: booking.customers.find((c) => c.role === "primary")?.name ?? booking.customers[0]?.name,
+    });
     const data = await prisma.paymentSchedule.findMany({
       where: { bookingId: booking.id },
       orderBy: { sortOrder: "asc" },
@@ -485,7 +522,9 @@ bookingsRouter.get(
       where: { id: String(req.params.id) },
       include: {
         unit: { include: { floor: { include: { wing: true } } } },
-        project: true,
+        project: {
+          include: { brokerageMilestones: { orderBy: { sortOrder: "asc" } } },
+        },
         customers: true,
         financials: true,
         entitlement: { include: { rule: true } },
@@ -500,7 +539,41 @@ bookingsRouter.get(
     if (!booking) throw new HttpError(404, "Booking not found");
     const user = requireUser(req);
     await assertProjectAccess(user, booking.projectId, { unitId: booking.unitId });
-    res.json(booking);
+
+    const toCollect = collectableAmount(booking.financials);
+    const customerReceived = round2(
+      booking.payments
+        .filter((p) => p.appliesTo === "customer" && p.status !== "pending")
+        .reduce((s, p) => s + p.amount, 0),
+    );
+    const collectionPct = toCollect ? Math.round((customerReceived / toCollect) * 1000) / 10 : 0;
+    const milestones = booking.project.brokerageMilestones;
+    const unlockedPct = milestones.length
+      ? unlockedBrokeragePct(milestones, collectionPct)
+      : (booking.project.agreedMandateBrokerage ??
+        booking.entitlement?.entitlementPercent ??
+        0);
+    const dealValue = booking.financials?.totalCost ?? 0;
+    const dueAmount = brokerageDueAmount(dealValue, unlockedPct);
+    const partnerReceived = booking.entitlement?.received ?? 0;
+
+    res.json({
+      ...booking,
+      brokerage: {
+        mandateTerm: booking.project.mandateTerm,
+        agreedMandateBrokerage: booking.project.agreedMandateBrokerage,
+        totalBrokeragePct: booking.project.totalBrokeragePct,
+        mandateBrokeragePaymentTerm: booking.project.mandateBrokeragePaymentTerm,
+        milestones,
+        customerCollectionPct: collectionPct,
+        customerReceived,
+        toCollect,
+        unlockedBrokeragePct: unlockedPct,
+        dueAmount,
+        partnerReceived,
+        partnerOutstandingOnDue: round2(Math.max(0, dueAmount - partnerReceived)),
+      },
+    });
   }),
 );
 

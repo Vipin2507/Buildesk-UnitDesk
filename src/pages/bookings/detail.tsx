@@ -28,7 +28,13 @@ type Booking = {
   bookingDate: string;
   status: string;
   unit: { unitNumber: string };
-  project: { name: string };
+  project: {
+    name: string;
+    mandateTerm?: string | null;
+    agreedMandateBrokerage?: number | null;
+    totalBrokeragePct?: number | null;
+    mandateBrokeragePaymentTerm?: string | null;
+  };
   customers: { id: string; role: string; name: string; mobile: string; email: string | null }[];
   financials: {
     agreement: number;
@@ -55,11 +61,34 @@ type Booking = {
     status: string;
     appliesTo: string;
   }[];
-  schedules: { id: string; name: string; dueDate: string; amount: number; received: number; outstanding: number; status: string }[];
+  schedules: {
+    id: string;
+    name: string;
+    afterDays?: number | null;
+    dueDate: string;
+    amount: number;
+    received: number;
+    outstanding: number;
+    status: string;
+  }[];
   invoices: { id: string; number: string; kind: string; amount: number; issuedAt: string; status: string }[];
   reminders: { id: string; title: string; status: string; dueAt: string; channel: string }[];
   projectId: string;
   unitId: string;
+  brokerage?: {
+    mandateTerm: string | null;
+    agreedMandateBrokerage: number | null;
+    totalBrokeragePct: number | null;
+    mandateBrokeragePaymentTerm: string | null;
+    milestones: { id: string; collectionPct: number; brokeragePct: number }[];
+    customerCollectionPct: number;
+    customerReceived: number;
+    toCollect: number;
+    unlockedBrokeragePct: number;
+    dueAmount: number;
+    partnerReceived: number;
+    partnerOutstandingOnDue: number;
+  };
 };
 
 export function BookingDetailPage() {
@@ -167,30 +196,96 @@ export function BookingDetailPage() {
           <Button size="sm" onClick={() => setPayOpen(true)}>Add payment</Button>
         </div>
         {data?.channelPartner ? (
-          <div className="grid gap-2 sm:grid-cols-5 text-sm">
-            <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Partner</p>
-              <p className="font-medium">{data.channelPartner.name}</p>
+          <>
+            <div className="grid gap-2 sm:grid-cols-5 text-sm">
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Partner</p>
+                <p className="font-medium">{data.channelPartner.name}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Agreed / share %</p>
+                <p className="tabular-nums">
+                  {data.brokerage?.agreedMandateBrokerage ?? data.entitlement?.entitlementPercent ?? "—"}%
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Full receivable</p>
+                <p className="tabular-nums">{inr(data.entitlement?.entitlementAmount)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Received</p>
+                <p className="tabular-nums">{inr(data.entitlement?.received)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground">Outstanding</p>
+                <p className={`font-semibold tabular-nums ${(data.entitlement?.outstanding ?? 0) > 0 ? "text-destructive" : ""}`}>
+                  {inr(data.entitlement?.outstanding)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Share %</p>
-              <p className="tabular-nums">{data.entitlement?.entitlementPercent ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Receivable</p>
-              <p className="tabular-nums">{inr(data.entitlement?.entitlementAmount)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Received</p>
-              <p className="tabular-nums">{inr(data.entitlement?.received)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Outstanding</p>
-              <p className={`font-semibold tabular-nums ${(data.entitlement?.outstanding ?? 0) > 0 ? "text-destructive" : ""}`}>
-                {inr(data.entitlement?.outstanding)}
-              </p>
-            </div>
-          </div>
+            {data.brokerage ? (
+              <div className="space-y-2 rounded-md border bg-muted/20 p-2.5">
+                <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Customer collection</p>
+                    <p className="font-semibold tabular-nums">{data.brokerage.customerCollectionPct}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Brokerage unlocked</p>
+                    <p className="font-semibold tabular-nums">{data.brokerage.unlockedBrokeragePct}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Due now</p>
+                    <p className="font-semibold tabular-nums">{inr(data.brokerage.dueAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-muted-foreground">Due outstanding</p>
+                    <p
+                      className={`font-semibold tabular-nums ${
+                        data.brokerage.partnerOutstandingOnDue > 0 ? "text-warning" : ""
+                      }`}
+                    >
+                      {inr(data.brokerage.partnerOutstandingOnDue)}
+                    </p>
+                  </div>
+                </div>
+                {(data.brokerage.milestones?.length ?? 0) > 0 ? (
+                  <div className="overflow-hidden rounded-md border bg-background">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-2 py-1.5 text-left font-medium">When collection hits</th>
+                          <th className="px-2 py-1.5 text-left font-medium">Brokerage due</th>
+                          <th className="px-2 py-1.5 text-left font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.brokerage.milestones.map((m) => {
+                          const unlocked = data.brokerage!.customerCollectionPct + 0.05 >= m.collectionPct;
+                          return (
+                            <tr key={m.id} className="border-t">
+                              <td className="px-2 py-1.5 tabular-nums">{m.collectionPct}%</td>
+                              <td className="px-2 py-1.5 tabular-nums font-medium">{m.brokeragePct}%</td>
+                              <td className="px-2 py-1.5">
+                                <span className={unlocked ? "text-success" : "text-muted-foreground"}>
+                                  {unlocked ? "Unlocked" : "Pending"}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+                {data.brokerage.mandateBrokeragePaymentTerm ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Payment term · {data.brokerage.mandateBrokeragePaymentTerm}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </>
         ) : (
           <p className="text-xs text-muted-foreground">No channel partner on this booking.</p>
         )}
@@ -212,7 +307,16 @@ export function BookingDetailPage() {
 
       <CardSoft>
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Payment schedule</p>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Installment break up
+            </p>
+            {(data?.schedules.length ?? 0) > 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                {data!.schedules.length} installment(s) · reminders scheduled on due dates
+              </p>
+            ) : null}
+          </div>
           {(data?.schedules.length ?? 0) === 0 && data ? (
             <Button
               size="sm"
@@ -231,10 +335,16 @@ export function BookingDetailPage() {
         <DataTable
           rows={data?.schedules ?? []}
           columns={[
-            { key: "n", header: "Milestone", cell: (r) => r.name },
-            { key: "d", header: "Due", cell: (r) => formatDate(r.dueDate) },
-            { key: "a", header: "Amount", cell: (r) => inr(r.amount) },
-            { key: "r", header: "Received", cell: (r) => inr(r.received) },
+            { key: "n", header: "Installment", cell: (r) => r.name },
+            {
+              key: "days",
+              header: "After days",
+              hideOnMobile: true,
+              cell: (r) => (r.afterDays != null ? `${r.afterDays}` : "—"),
+            },
+            { key: "d", header: "Due date", cell: (r) => formatDate(r.dueDate) },
+            { key: "a", header: "Value", cell: (r) => inr(r.amount) },
+            { key: "r", header: "Received", hideOnMobile: true, cell: (r) => inr(r.received) },
             { key: "o", header: "Outstanding", cell: (r) => inr(r.outstanding) },
             { key: "st", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
           ]}

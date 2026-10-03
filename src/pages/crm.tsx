@@ -69,7 +69,7 @@ export function CrmPage() {
     <PageWrap>
       <PageHeader
         title="CRM activities"
-        subtitle="Payment, KYC and follow-up reminders"
+        subtitle="Payment due (from installment dates), KYC and follow-up reminders"
         breadcrumbs={projectId ? [{ label: "Project", to: `/projects/${projectId}` }, { label: "CRM" }] : undefined}
       />
       <CardSoft className="max-w-2xl space-y-2.5">
