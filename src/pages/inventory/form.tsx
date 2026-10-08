@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useMasterOptions } from "@/hooks/use-master-options";
 import { api, ApiError } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { isCustomUnitPhoto, projectPlansFrom, resolveUnitPhotoUrl } from "@/lib/unit-plans";
@@ -103,6 +104,8 @@ export function UnitFormPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [form, setForm] = useState<Form>(empty);
+  const { data: unitTypes } = useMasterOptions("unitType");
+  const { data: facings } = useMasterOptions("facing");
 
   const { data: project } = useQuery({
     queryKey: qk.project(id!),
@@ -276,17 +279,26 @@ export function UnitFormPage() {
           </Field>
           <Field label="Unit type">
             <Select
-              value={form.unitType || "2BHK"}
+              value={form.unitType || unitTypes?.data?.[0]?.value || "2BHK"}
               onValueChange={(v) => {
                 set("unitType", v);
-                set("configuration", v.replace("BHK", " BHK"));
+                set("configuration", v.includes("BHK") ? v.replace("BHK", " BHK") : v);
               }}
             >
               <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="1BHK">1BHK</SelectItem>
-                <SelectItem value="2BHK">2BHK</SelectItem>
-                <SelectItem value="3BHK">3BHK</SelectItem>
+                {(unitTypes?.data?.length
+                  ? unitTypes.data
+                  : [
+                      { value: "1BHK", label: "1BHK" },
+                      { value: "2BHK", label: "2BHK" },
+                      { value: "3BHK", label: "3BHK" },
+                    ]
+                ).map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
@@ -310,14 +322,14 @@ export function UnitFormPage() {
               <SelectTrigger className="h-8"><SelectValue placeholder="Facing" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
-                <SelectItem value="East">East</SelectItem>
-                <SelectItem value="West">West</SelectItem>
-                <SelectItem value="North">North</SelectItem>
-                <SelectItem value="South">South</SelectItem>
-                <SelectItem value="North-East">North-East</SelectItem>
-                <SelectItem value="North-West">North-West</SelectItem>
-                <SelectItem value="South-East">South-East</SelectItem>
-                <SelectItem value="South-West">South-West</SelectItem>
+                {(facings?.data?.length
+                  ? facings.data
+                  : ["East", "West", "North", "South"].map((f) => ({ value: f, label: f }))
+                ).map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>

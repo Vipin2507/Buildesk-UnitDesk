@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppShell } from "@/components/layout/app-shell";
 import { PartnerShell } from "@/components/layout/partner-shell";
@@ -28,12 +28,10 @@ import { PaymentsPage } from "@/pages/payments/list";
 import { UsersPage } from "@/pages/users/list";
 import { MastersPage } from "@/pages/masters";
 import { ReportsPage } from "@/pages/reports";
-import { SettingsPage } from "@/pages/settings";
+import { SettingsGeneralPage } from "@/pages/settings";
+import { SettingsWorkspace } from "@/components/layout/settings-workspace";
 import { DocumentsPage } from "@/pages/documents";
 import { CrmPage } from "@/pages/crm";
-import { MarketingPage } from "@/pages/marketing";
-import { IntegrationsPage } from "@/pages/integrations";
-import { ApprovalsPage } from "@/pages/approvals";
 import { InvoiceViewPage } from "@/pages/invoices/view";
 import { PartnerLoginPage } from "@/pages/partner-portal/login";
 import { PartnerPortalHome } from "@/pages/partner-portal/home";
@@ -44,6 +42,11 @@ import { PartnerPortalDocuments } from "@/pages/partner-portal/documents";
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
+
+function ChannelPartnerRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/settings/channel-partners/${id}`} replace />;
+}
 
 export default function App() {
   return (
@@ -97,15 +100,25 @@ export default function App() {
               <Route path="/bookings/:id" element={<BookingDetailPage />} />
               <Route path="/invoices/:id" element={<InvoiceViewPage />} />
               <Route path="/customers" element={<CustomersPage />} />
-              <Route path="/channel-partners" element={<PartnersListPage />} />
-              <Route path="/channel-partners/:id" element={<PartnerDashboardPage />} />
-              <Route path="/approvals" element={<ApprovalsPage />} />
-              <Route path="/masters" element={<MastersPage />} />
-              <Route path="/marketing" element={<MarketingPage />} />
               <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/integrations" element={<IntegrationsPage />} />
-              <Route path="/users" element={<UsersPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+
+              <Route path="/settings" element={<SettingsWorkspace />}>
+                <Route index element={<SettingsGeneralPage />} />
+                <Route path="channel-partners" element={<PartnersListPage />} />
+                <Route path="channel-partners/:id" element={<PartnerDashboardPage />} />
+                <Route path="masters" element={<MastersPage />} />
+                <Route path="users" element={<UsersPage />} />
+              </Route>
+
+              {/* Legacy redirects */}
+              <Route path="/channel-partners" element={<Navigate to="/settings/channel-partners" replace />} />
+              <Route path="/channel-partners/:id" element={<ChannelPartnerRedirect />} />
+              <Route path="/masters" element={<Navigate to="/settings/masters" replace />} />
+              <Route path="/users" element={<Navigate to="/settings/users" replace />} />
+              <Route path="/approvals" element={<Navigate to="/settings" replace />} />
+              <Route path="/marketing" element={<Navigate to="/settings" replace />} />
+              <Route path="/integrations" element={<Navigate to="/settings" replace />} />
+
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Route>

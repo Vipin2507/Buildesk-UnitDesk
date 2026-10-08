@@ -1,16 +1,10 @@
 import {
   Building2,
   Building,
-  ClipboardCheck,
   FileBarChart,
-  Handshake,
   LayoutDashboard,
-  Megaphone,
-  Plug,
   Settings,
-  Shield,
   Users,
-  Boxes,
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -23,13 +17,7 @@ const items = [
   { to: "/companies", icon: Building2, label: "Companies" },
   { to: "/projects", icon: Building, label: "Projects" },
   { to: "/customers", icon: Users, label: "Customers" },
-  { to: "/channel-partners", icon: Handshake, label: "Channel Partners" },
-  { to: "/approvals", icon: ClipboardCheck, label: "Approvals" },
-  { to: "/masters", icon: Boxes, label: "Masters" },
-  { to: "/marketing", icon: Megaphone, label: "Marketing" },
   { to: "/reports", icon: FileBarChart, label: "Reports" },
-  { to: "/integrations", icon: Plug, label: "Integrations" },
-  { to: "/users", icon: Shield, label: "Users & Roles" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

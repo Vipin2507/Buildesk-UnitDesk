@@ -20,6 +20,9 @@ export const qk = {
   dashboardAdmin: ["dashboard", "admin"] as const,
   dashboardProject: (id: string) => ["dashboard", "project", id] as const,
   employees: ["employees"] as const,
+  employeesList: (filters?: unknown) => ["employees", "list", filters] as const,
+  employeesSummary: ["employees", "summary"] as const,
+  partnersSummary: ["channel-partners", "summary"] as const,
   roles: ["roles"] as const,
   access: (employeeId: string) => ["access", employeeId] as const,
   commissionRules: (projectId: string) =>

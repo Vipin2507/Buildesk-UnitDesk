@@ -14,7 +14,7 @@ import { useThemeStore } from "@/stores/theme";
 
 type Settings = Record<string, string>;
 
-export function SettingsPage() {
+export function SettingsGeneralPage() {
   const theme = useThemeStore((s) => s.theme);
   const toggle = useThemeStore((s) => s.toggle);
   const qc = useQueryClient();
@@ -37,7 +37,7 @@ export function SettingsPage() {
 
   return (
     <PageWrap>
-      <PageHeader title="Settings" subtitle="Workspace preferences" />
+      <PageHeader title="General" subtitle="Workspace preferences" />
       <CardSoft className="max-w-lg space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -79,3 +79,6 @@ export function SettingsPage() {
     </PageWrap>
   );
 }
+
+/** @deprecated use SettingsGeneralPage */
+export const SettingsPage = SettingsGeneralPage;

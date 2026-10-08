@@ -509,7 +509,7 @@ export function ProjectSetupPage() {
                 </div>
               ))}
             </div>
-            <Button size="sm" variant="outline" className="w-full" onClick={() => navigate("/users")}>
+            <Button size="sm" variant="outline" className="w-full" onClick={() => navigate("/settings/users")}>
               Manage users
             </Button>
           </CardSoft>

@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useMasterOptions } from "@/hooks/use-master-options";
 import { api, ApiError, type ListResponse } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDate, inr, pct } from "@/lib/format";
@@ -249,6 +250,7 @@ export function PaymentsPage() {
   const [editing, setEditing] = useState<Payment | null>(null);
   const [confirm, setConfirm] = useState<Payment | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
+  const { data: paymentModes } = useMasterOptions("paymentMode");
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(search), 220);
@@ -927,9 +929,22 @@ export function PaymentsPage() {
               <Select value={form.paymentMode} onValueChange={(v) => setForm((f) => ({ ...f, paymentMode: v }))}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["neft", "rtgs", "upi", "cash", "cheque"].map((m) => (
-                    <SelectItem key={m} value={m}>{m.toUpperCase()}</SelectItem>
+                  {(paymentModes?.data?.length
+                    ? paymentModes.data
+                    : ["neft", "rtgs", "upi", "cash", "cheque"].map((m) => ({
+                        value: m,
+                        label: m.toUpperCase(),
+                      }))
+                  ).map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
                   ))}
+                  {form.paymentMode &&
+                  !(paymentModes?.data ?? []).some((o) => o.value === form.paymentMode) &&
+                  !["neft", "rtgs", "upi", "cash", "cheque"].includes(form.paymentMode) ? (
+                    <SelectItem value={form.paymentMode}>{form.paymentMode}</SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
             </Field>

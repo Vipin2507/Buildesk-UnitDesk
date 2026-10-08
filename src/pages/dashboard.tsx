@@ -778,7 +778,12 @@ export function DashboardPage() {
               <GlanceRow label="Received" value={inr(data?.glance.partners.received)} />
               <GlanceRow label="Outstanding" value={inr(data?.glance.partners.outstanding)} />
               <div className="pt-2">
-                <Button variant="outline" size="sm" className="h-7 w-full" onClick={() => navigate("/channel-partners")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-full"
+                  onClick={() => navigate("/settings/channel-partners")}
+                >
                   <Building2 className="h-3 w-3" /> Partners
                 </Button>
               </div>

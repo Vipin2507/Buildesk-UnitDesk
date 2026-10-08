@@ -59,17 +59,48 @@ employeesRouter.get(
 );
 
 employeesRouter.get(
+  "/summary",
+  asyncHandler(async (_req, res) => {
+    const [total, active, inactive, roles, withAccess] = await Promise.all([
+      prisma.employee.count(),
+      prisma.employee.count({ where: { status: "active" } }),
+      prisma.employee.count({ where: { status: "inactive" } }),
+      prisma.role.count(),
+      prisma.employee.count({ where: { access: { some: {} } } }),
+    ]);
+    res.json({ total, active, inactive, roles, withAccess });
+  }),
+);
+
+employeesRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const { page, pageSize, skip, take } = listMeta(req);
+    const search = String(req.query.search ?? "").trim();
+    const status = req.query.status ? String(req.query.status) : null;
+    const roleId = req.query.roleId ? String(req.query.roleId) : null;
+    const where = {
+      ...(status ? { status } : {}),
+      ...(roleId ? { roleId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search } },
+              { email: { contains: search } },
+              { phone: { contains: search } },
+            ],
+          }
+        : {}),
+    };
     const [data, total] = await Promise.all([
       prisma.employee.findMany({
+        where,
         skip,
         take,
         orderBy: { name: "asc" },
         include: { role: true, access: { include: { project: true, wing: true } } },
       }),
-      prisma.employee.count(),
+      prisma.employee.count({ where }),
     ]);
     res.json(
       listResult(

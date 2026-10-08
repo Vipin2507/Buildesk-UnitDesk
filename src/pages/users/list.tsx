@@ -1,10 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus, Shield, UserRound, KeyRound } from "lucide-react";
-import { useState } from "react";
+import {
+  KeyRound,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Shield,
+  UserCheck,
+  UserRound,
+  UserX,
+  Users,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Field } from "@/components/shared/field";
+import { KpiCard } from "@/components/shared/kpi-card";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageWrap } from "@/components/shared/page-wrap";
 import { PasswordInput } from "@/components/shared/password-input";
@@ -94,10 +105,21 @@ function stopRow(e: { stopPropagation: () => void }) {
   e.stopPropagation();
 }
 
+type Summary = {
+  total: number;
+  active: number;
+  inactive: number;
+  roles: number;
+  withAccess: number;
+};
+
 export function UsersPage() {
   const qc = useQueryClient();
   const me = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<"users" | "roles" | "access">("users");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [userOpen, setUserOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
@@ -108,9 +130,24 @@ export function UsersPage() {
   const [accessForm, setAccessForm] = useState({ employeeId: "", projectId: "" });
   const [confirm, setConfirm] = useState<{ kind: "user" | "role" | "access"; id: string; label: string } | null>(null);
 
+  const listParams = useMemo(
+    () => ({
+      search: search.trim() || undefined,
+      status: statusFilter === "all" ? undefined : statusFilter,
+      roleId: roleFilter === "all" ? undefined : roleFilter,
+      pageSize: 100,
+    }),
+    [search, statusFilter, roleFilter],
+  );
+
+  const { data: summary } = useQuery({
+    queryKey: qk.employeesSummary,
+    queryFn: () => api.get<Summary>("/api/employees/summary"),
+  });
+
   const { data: users } = useQuery({
-    queryKey: qk.employees,
-    queryFn: () => api.get<ListResponse<Employee>>("/api/employees", { pageSize: 100 }),
+    queryKey: qk.employeesList(listParams),
+    queryFn: () => api.get<ListResponse<Employee>>("/api/employees", listParams),
   });
   const { data: roles } = useQuery({
     queryKey: qk.roles,
@@ -119,6 +156,12 @@ export function UsersPage() {
   const { data: projects } = useQuery({
     queryKey: qk.projects(),
     queryFn: () => api.get<ListResponse<Project>>("/api/projects", { pageSize: 50 }),
+  });
+
+  const { data: allUsers } = useQuery({
+    queryKey: qk.employees,
+    queryFn: () => api.get<ListResponse<Employee>>("/api/employees", { pageSize: 100 }),
+    enabled: tab === "access",
   });
 
   function openCreateUser() {
@@ -172,6 +215,8 @@ export function UsersPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.employees });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: qk.employeesSummary });
       toast.success(editingUser ? "User updated" : "User created");
       setUserOpen(false);
     },
@@ -194,7 +239,8 @@ export function UsersPage() {
   const grant = useMutation({
     mutationFn: () => api.post("/api/employees/access", { ...accessForm, wingId: null, unitId: null }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.employees });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: qk.employeesSummary });
       toast.success("Project access granted");
       setAccessOpen(false);
       setAccessForm({ employeeId: "", projectId: "" });
@@ -206,7 +252,8 @@ export function UsersPage() {
     mutationFn: (row: Employee) =>
       api.patch(`/api/employees/${row.id}`, { status: row.status === "active" ? "inactive" : "active" }),
     onSuccess: (_, row) => {
-      qc.invalidateQueries({ queryKey: qk.employees });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: qk.employeesSummary });
       toast.success(row.status === "active" ? "User deactivated" : "User activated");
     },
     onError: (err) => fail(err, "Could not update status"),
@@ -220,7 +267,8 @@ export function UsersPage() {
       else await api.del(`/api/employees/access/${confirm.id}`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.employees });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: qk.employeesSummary });
       qc.invalidateQueries({ queryKey: qk.roles });
       toast.success(
         confirm?.kind === "role" ? "Role deleted" : confirm?.kind === "access" ? "Access revoked" : "User deleted",
@@ -250,6 +298,40 @@ export function UsersPage() {
           )
         }
       />
+      {tab === "users" ? (
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <KpiCard
+            label="Users"
+            value={summary?.total ?? 0}
+            icon={Users}
+            active={statusFilter === "all"}
+            onClick={() => setStatusFilter("all")}
+          />
+          <KpiCard
+            label="Active"
+            value={summary?.active ?? 0}
+            icon={UserCheck}
+            tone="success"
+            active={statusFilter === "active"}
+            onClick={() => setStatusFilter("active")}
+          />
+          <KpiCard
+            label="Inactive"
+            value={summary?.inactive ?? 0}
+            icon={UserX}
+            tone="muted"
+            active={statusFilter === "inactive"}
+            onClick={() => setStatusFilter("inactive")}
+          />
+          <KpiCard
+            label="Roles"
+            value={summary?.roles ?? 0}
+            icon={Shield}
+            onClick={() => setTab("roles")}
+          />
+        </div>
+      ) : null}
+
       <SegmentedTabs
         tabs={[
           { id: "users", label: "Users" },
@@ -260,6 +342,35 @@ export function UsersPage() {
         onChange={setTab}
       >
         {tab === "users" && (
+          <>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[200px] flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-8 pl-8"
+                placeholder="Search name, email, phone…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-8 w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="h-8 w-[160px]"><SelectValue placeholder="Role" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                {(roles?.data ?? []).map((r) => (
+                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <DataTable
             rows={users?.data ?? []}
             onRowClick={openEditUser}
@@ -307,6 +418,7 @@ export function UsersPage() {
               },
             ]}
           />
+          </>
         )}
         {tab === "roles" && (
           <DataTable
@@ -355,7 +467,7 @@ export function UsersPage() {
         )}
         {tab === "access" && (
           <DataTable
-            rows={(users?.data ?? []).flatMap((u) =>
+            rows={(allUsers?.data ?? users?.data ?? []).flatMap((u) =>
               u.access.map((a) => ({
                 id: a.id,
                 user: u.name,
@@ -508,7 +620,7 @@ export function UsersPage() {
             <Select value={accessForm.employeeId} onValueChange={(v) => setAccessForm({ ...accessForm, employeeId: v })}>
               <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
-                {(users?.data ?? []).map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                {(allUsers?.data ?? users?.data ?? []).map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>

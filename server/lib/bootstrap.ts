@@ -12,9 +12,24 @@ const INTEGRATIONS = [
 ];
 
 const MASTERS: { group: string; label: string; value: string; sortOrder: number }[] = [
-  ...["2BHK", "3BHK", "4BHK", "Shop", "Office"].map((v, i) => ({ group: "unitType", label: v, value: v, sortOrder: i })),
-  ...["East", "West", "North", "South", "NE", "NW"].map((v, i) => ({ group: "facing", label: v, value: v, sortOrder: i })),
-  ...["cash", "cheque", "neft", "rtgs", "upi"].map((v, i) => ({ group: "paymentMode", label: v.toUpperCase(), value: v, sortOrder: i })),
+  ...["1BHK", "2BHK", "3BHK", "4BHK", "Shop", "Office"].map((v, i) => ({
+    group: "unitType",
+    label: v,
+    value: v,
+    sortOrder: i,
+  })),
+  ...["East", "West", "North", "South", "North-East", "North-West", "South-East", "South-West"].map((v, i) => ({
+    group: "facing",
+    label: v,
+    value: v,
+    sortOrder: i,
+  })),
+  ...["cash", "cheque", "neft", "rtgs", "upi"].map((v, i) => ({
+    group: "paymentMode",
+    label: v.toUpperCase(),
+    value: v,
+    sortOrder: i,
+  })),
   ...["kyc", "agreement", "floor_plan", "receipt", "invoice", "other"].map((v, i) => ({
     group: "documentCategory",
     label: v.replace("_", " "),
@@ -27,8 +42,12 @@ export async function bootstrapPhase2() {
   if ((await prisma.integration.count()) === 0) {
     await prisma.integration.createMany({ data: INTEGRATIONS });
   }
-  if ((await prisma.masterOption.count()) === 0) {
-    await prisma.masterOption.createMany({ data: MASTERS });
+  for (const m of MASTERS) {
+    await prisma.masterOption.upsert({
+      where: { group_value: { group: m.group, value: m.value } },
+      update: {},
+      create: m,
+    });
   }
   const settings = [
     { key: "requireApprovalForCancel", value: "true" },

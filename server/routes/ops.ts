@@ -463,9 +463,13 @@ opsRouter.get(
   "/masters",
   asyncHandler(async (req, res) => {
     const group = req.query.group ? String(req.query.group) : undefined;
+    const includeInactive = String(req.query.includeInactive ?? "") === "true";
     const data = await prisma.masterOption.findMany({
-      where: { ...(group ? { group } : {}), active: true },
-      orderBy: [{ group: "asc" }, { sortOrder: "asc" }],
+      where: {
+        ...(group ? { group } : {}),
+        ...(includeInactive ? {} : { active: true }),
+      },
+      orderBy: [{ group: "asc" }, { sortOrder: "asc" }, { label: "asc" }],
     });
     res.json({ data, total: data.length, page: 1, pageSize: data.length });
   }),
@@ -473,12 +477,122 @@ opsRouter.get(
 
 opsRouter.post(
   "/masters",
-  validate(z.object({ group: z.string(), label: z.string(), value: z.string() })),
+  validate(
+    z.object({
+      group: z.string().min(1),
+      label: z.string().min(1),
+      value: z.string().min(1),
+      sortOrder: z.number().int().optional(),
+      active: z.boolean().optional(),
+    }),
+  ),
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     requirePermission(user, "add");
-    const body = req.body as { group: string; label: string; value: string };
-    const created = await prisma.masterOption.create({ data: body });
+    const body = req.body as {
+      group: string;
+      label: string;
+      value: string;
+      sortOrder?: number;
+      active?: boolean;
+    };
+    const exists = await prisma.masterOption.findUnique({
+      where: { group_value: { group: body.group, value: body.value } },
+    });
+    if (exists) throw new HttpError(409, "An option with this value already exists in the group");
+    const maxSort = await prisma.masterOption.aggregate({
+      where: { group: body.group },
+      _max: { sortOrder: true },
+    });
+    const created = await prisma.masterOption.create({
+      data: {
+        group: body.group,
+        label: body.label,
+        value: body.value,
+        sortOrder: body.sortOrder ?? (maxSort._max.sortOrder ?? -1) + 1,
+        active: body.active ?? true,
+      },
+    });
+    await audit({
+      actorId: user.id,
+      actorName: user.name,
+      action: "master.create",
+      entityType: "master_option",
+      entityId: created.id,
+      meta: { group: created.group, value: created.value },
+    });
     res.status(201).json(created);
+  }),
+);
+
+opsRouter.patch(
+  "/masters/:id",
+  validate(
+    z.object({
+      label: z.string().min(1).optional(),
+      value: z.string().min(1).optional(),
+      sortOrder: z.number().int().optional(),
+      active: z.boolean().optional(),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const user = requireUser(req);
+    requirePermission(user, "edit");
+    const id = String(req.params.id);
+    const existing = await prisma.masterOption.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Master option not found");
+    const body = req.body as {
+      label?: string;
+      value?: string;
+      sortOrder?: number;
+      active?: boolean;
+    };
+    if (body.value && body.value !== existing.value) {
+      const clash = await prisma.masterOption.findUnique({
+        where: { group_value: { group: existing.group, value: body.value } },
+      });
+      if (clash) throw new HttpError(409, "An option with this value already exists in the group");
+    }
+    const updated = await prisma.masterOption.update({
+      where: { id },
+      data: {
+        ...(body.label !== undefined ? { label: body.label } : {}),
+        ...(body.value !== undefined ? { value: body.value } : {}),
+        ...(body.sortOrder !== undefined ? { sortOrder: body.sortOrder } : {}),
+        ...(body.active !== undefined ? { active: body.active } : {}),
+      },
+    });
+    await audit({
+      actorId: user.id,
+      actorName: user.name,
+      action: "master.update",
+      entityType: "master_option",
+      entityId: id,
+      meta: body,
+    });
+    res.json(updated);
+  }),
+);
+
+opsRouter.delete(
+  "/masters/:id",
+  asyncHandler(async (req, res) => {
+    const user = requireUser(req);
+    requirePermission(user, "edit");
+    const id = String(req.params.id);
+    const existing = await prisma.masterOption.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Master option not found");
+    const updated = await prisma.masterOption.update({
+      where: { id },
+      data: { active: false },
+    });
+    await audit({
+      actorId: user.id,
+      actorName: user.name,
+      action: "master.deactivate",
+      entityType: "master_option",
+      entityId: id,
+    });
+    res.json({ ...updated, deactivated: true });
   }),
 );

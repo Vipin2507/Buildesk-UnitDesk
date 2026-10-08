@@ -373,3 +373,54 @@ projectsRouter.post(
     res.status(201).json(created);
   }),
 );
+
+projectsRouter.patch(
+  "/:id/commission-rules/:ruleId",
+  validate(
+    z.object({
+      name: z.string().optional().nullable(),
+      type: z.enum(["percentage", "flat_per_unit", "slab"]).optional(),
+      value: z.number().optional().nullable(),
+      slabConfig: z
+        .array(z.object({ min: z.number(), max: z.number().nullable(), rate: z.number() }))
+        .optional()
+        .nullable(),
+      active: z.boolean().optional(),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const user = requireUser(req);
+    requirePermission(user, "edit");
+    const projectId = String(req.params.id);
+    const ruleId = String(req.params.ruleId);
+    await assertProjectAccess(user, projectId);
+    const existing = await prisma.commissionRule.findFirst({ where: { id: ruleId, projectId } });
+    if (!existing) throw new HttpError(404, "Commission rule not found");
+    const body = req.body as {
+      name?: string | null;
+      type?: string;
+      value?: number | null;
+      slabConfig?: unknown;
+      active?: boolean;
+    };
+    if (body.active === true) {
+      await prisma.commissionRule.updateMany({
+        where: { projectId, active: true, id: { not: ruleId } },
+        data: { active: false },
+      });
+    }
+    const updated = await prisma.commissionRule.update({
+      where: { id: ruleId },
+      data: {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.type !== undefined ? { type: body.type } : {}),
+        ...(body.value !== undefined ? { value: body.value } : {}),
+        ...(body.slabConfig !== undefined
+          ? { slabConfig: body.slabConfig ? JSON.stringify(body.slabConfig) : null }
+          : {}),
+        ...(body.active !== undefined ? { active: body.active } : {}),
+      },
+    });
+    res.json(updated);
+  }),
+);

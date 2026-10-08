@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useMasterOptions } from "@/hooks/use-master-options";
 import { api, ApiError } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { isCustomUnitPhoto, projectPlansFrom, resolveUnitPhotoUrl, type ProjectPlanUrls } from "@/lib/unit-plans";
@@ -91,6 +92,8 @@ export function UnitEditDialog({
 }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<Form | null>(null);
+  const { data: unitTypes } = useMasterOptions("unitType", open);
+  const { data: facings } = useMasterOptions("facing", open);
 
   const { data: unit } = useQuery({
     queryKey: qk.unit(unitId ?? ""),
@@ -187,17 +190,31 @@ export function UnitEditDialog({
             </Field>
             <Field label="Unit type">
               <Select
-                value={form.unitType || "2BHK"}
+                value={form.unitType || unitTypes?.data?.[0]?.value || "2BHK"}
                 onValueChange={(v) => {
                   set("unitType", v);
-                  set("configuration", v.replace("BHK", " BHK"));
+                  set("configuration", v.includes("BHK") ? v.replace("BHK", " BHK") : v);
                 }}
               >
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1BHK">1BHK</SelectItem>
-                  <SelectItem value="2BHK">2BHK</SelectItem>
-                  <SelectItem value="3BHK">3BHK</SelectItem>
+                  {(unitTypes?.data?.length
+                    ? unitTypes.data
+                    : [
+                        { value: "1BHK", label: "1BHK" },
+                        { value: "2BHK", label: "2BHK" },
+                        { value: "3BHK", label: "3BHK" },
+                      ]
+                  ).map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                  {form.unitType &&
+                  !(unitTypes?.data ?? []).some((o) => o.value === form.unitType) &&
+                  !["1BHK", "2BHK", "3BHK"].includes(form.unitType) ? (
+                    <SelectItem value={form.unitType}>{form.unitType}</SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
             </Field>
@@ -221,9 +238,17 @@ export function UnitEditDialog({
                 <SelectTrigger className="h-9"><SelectValue placeholder="Facing" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">—</SelectItem>
-                  {["East", "West", "North", "South", "North-East", "North-West", "South-East", "South-West"].map((f) => (
-                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                  {(facings?.data?.length
+                    ? facings.data
+                    : ["East", "West", "North", "South"].map((f) => ({ value: f, label: f }))
+                  ).map((f) => (
+                    <SelectItem key={f.value} value={f.value}>
+                      {f.label}
+                    </SelectItem>
                   ))}
+                  {form.facing && !(facings?.data ?? []).some((o) => o.value === form.facing) ? (
+                    <SelectItem value={form.facing}>{form.facing}</SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
             </Field>

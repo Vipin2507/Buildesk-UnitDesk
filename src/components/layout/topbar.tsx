@@ -100,7 +100,7 @@ export function Topbar() {
         id: p.id,
         label: p.name,
         hint: "Channel partner",
-        go: () => navigate(`/channel-partners/${p.id}`),
+        go: () => navigate(`/settings/channel-partners/${p.id}`),
       })),
     ];
   }, [results, navigate, openUnit, onInventory]);
