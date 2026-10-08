@@ -40,7 +40,7 @@ export function InvoiceViewPage() {
       <PageHeader
         title={data?.number ?? "Document"}
         subtitle={`${data?.kind ?? ""} · ${data?.booking.bookingNumber ?? ""}`}
-        breadcrumbs={[{ label: "Bookings", to: "/bookings" }, { label: data?.number ?? "Invoice" }]}
+        breadcrumbs={[{ label: "Projects", to: "/projects" }, { label: data?.number ?? "Invoice" }]}
         actions={<Button size="sm" variant="outline" onClick={() => window.print()}>Print</Button>}
       />
       {data ? (

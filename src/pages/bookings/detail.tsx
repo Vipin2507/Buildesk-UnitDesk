@@ -140,7 +140,13 @@ export function BookingDetailPage() {
       <PageHeader
         title={data?.bookingNumber ?? "Booking"}
         subtitle={`${data?.project.name ?? ""} · ${data?.unit.unitNumber ?? ""} · ${formatDate(data?.bookingDate)}`}
-        breadcrumbs={[{ label: "Bookings", to: "/bookings" }, { label: data?.bookingNumber ?? "Detail" }]}
+        breadcrumbs={[
+          {
+            label: "Bookings",
+            to: data?.projectId ? `/projects/${data.projectId}/bookings` : "/projects",
+          },
+          { label: data?.bookingNumber ?? "Detail" },
+        ]}
         actions={
           data ? (
             <div className="flex gap-1.5">

@@ -472,7 +472,7 @@ export function ProjectOverviewPage() {
           hint={`Agreement ${inr(k?.agreement, true)}`}
           icon={CircleDollarSign}
           delay={staggerDelay(3)}
-          onClick={() => navigate("/bookings")}
+          onClick={() => navigate(`/projects/${id}/bookings`)}
           chips={<Chip tone="success">Other {inr(k?.otherCharges, true)}</Chip>}
         />
         <MetricCard
@@ -481,7 +481,7 @@ export function ProjectOverviewPage() {
           icon={HandCoins}
           tone="success"
           delay={staggerDelay(4)}
-          onClick={() => navigate("/payments")}
+          onClick={() => navigate(`/projects/${id}/receipts`)}
           chips={<Chip tone="success">{k?.collectionPct ?? 0}%</Chip>}
         />
         <MetricCard
@@ -491,7 +491,7 @@ export function ProjectOverviewPage() {
           icon={Wallet}
           tone="warning"
           delay={staggerDelay(5)}
-          onClick={() => navigate("/payments")}
+          onClick={() => navigate(`/projects/${id}/receipts`)}
           chips={<Chip tone="warning">{k?.pendingPct ?? 0}%</Chip>}
         />
       </div>
@@ -640,7 +640,12 @@ export function ProjectOverviewPage() {
           <SectionTitle
             title="Recent bookings"
             action={
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={() => navigate("/bookings")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => navigate(`/projects/${id}/bookings`)}
+              >
                 View all <ArrowUpRight className="h-3 w-3" />
               </Button>
             }

@@ -97,7 +97,7 @@ export function ProjectsListPage() {
         rows={rows}
         onRowClick={(row) => {
           setProject(row.id, companyId ?? null);
-          navigate(`/projects/${row.id}/inventory`);
+          navigate(`/projects/${row.id}`);
         }}
         empty={
           <EmptyState

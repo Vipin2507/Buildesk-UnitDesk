@@ -298,9 +298,17 @@ export function DashboardPage() {
   const colors = useChartColors();
   const setStatus = useInventoryFilterStore((s) => s.setStatus);
   const setProject = useProjectContextStore((s) => s.setProject);
+  const projectId = useProjectContextStore((s) => s.projectId);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const reduced = prefersReducedMotion();
+
+  const goInventory = () =>
+    navigate(projectId ? `/projects/${projectId}/inventory` : "/projects");
+  const goBookings = () =>
+    navigate(projectId ? `/projects/${projectId}/bookings` : "/projects");
+  const goReceipts = () =>
+    navigate(projectId ? `/projects/${projectId}/receipts` : "/projects");
 
   const { data, isFetching } = useQuery({
     queryKey: qk.dashboardAdmin,
@@ -338,7 +346,7 @@ export function DashboardPage() {
             <Button variant="outline" size="sm" onClick={() => navigate("/bookings/new")}>
               New booking
             </Button>
-            <Button size="sm" onClick={() => navigate("/inventory")}>
+            <Button size="sm" onClick={goInventory}>
               Open inventory
             </Button>
           </>
@@ -352,7 +360,7 @@ export function DashboardPage() {
           hint={`${k?.projects ?? 0} projects · ${k?.companies ?? 0} companies`}
           icon={LayoutGrid}
           delay={staggerDelay(0)}
-          onClick={() => navigate("/inventory")}
+          onClick={goInventory}
           chips={(data?.unitTypes ?? []).slice(0, 3).map((t) => (
             <Chip key={t.type} tone="muted">{t.total}×{t.type.replace("BHK", "B")}</Chip>
           ))}
@@ -364,7 +372,7 @@ export function DashboardPage() {
           icon={CircleDot}
           tone="success"
           delay={staggerDelay(1)}
-          onClick={() => navigate("/inventory")}
+          onClick={goInventory}
           chips={
             <>
               <Chip tone="success">Sold {k?.sold ?? 0}</Chip>
@@ -387,7 +395,7 @@ export function DashboardPage() {
           hint={`Agreement ${inr(k?.agreement, true)}`}
           icon={CircleDollarSign}
           delay={staggerDelay(3)}
-          onClick={() => navigate("/bookings")}
+          onClick={goBookings}
           chips={<Chip tone="success">Other {inr(k?.otherCharges, true)}</Chip>}
         />
         <MetricCard
@@ -397,7 +405,7 @@ export function DashboardPage() {
           icon={HandCoins}
           tone="success"
           delay={staggerDelay(4)}
-          onClick={() => navigate("/payments")}
+          onClick={goReceipts}
           chips={<Chip tone="success">{k?.collectionPct ?? 0}%</Chip>}
         />
         <MetricCard
@@ -407,7 +415,7 @@ export function DashboardPage() {
           icon={Wallet}
           tone="warning"
           delay={staggerDelay(5)}
-          onClick={() => navigate("/payments")}
+          onClick={goReceipts}
           chips={<Chip tone="warning">{k?.pendingPct ?? 0}%</Chip>}
         />
       </div>
@@ -443,7 +451,7 @@ export function DashboardPage() {
           <SectionTitle
             title="Unit summary"
             action={
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={() => navigate("/inventory")}>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={goInventory}>
                 View all <ArrowUpRight className="h-3 w-3" />
               </Button>
             }
@@ -463,7 +471,7 @@ export function DashboardPage() {
                       const key = (entry as { key?: string }).key;
                       if (!key) return;
                       setStatus(key);
-                      navigate("/inventory");
+                      goInventory();
                     }}
                   >
                     {(data?.status ?? []).map((s) => (
@@ -482,7 +490,7 @@ export function DashboardPage() {
                   className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left text-xs hover:bg-muted/50"
                   onClick={() => {
                     setStatus(s.key);
-                    navigate("/inventory");
+                    goInventory();
                   }}
                 >
                   <span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[s.key] }} />
