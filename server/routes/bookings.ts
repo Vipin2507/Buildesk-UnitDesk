@@ -555,6 +555,7 @@ bookingsRouter.get(
         .filter((p) => p.appliesTo === "customer" && p.status !== "pending")
         .reduce((s, p) => s + p.amount, 0),
     );
+    const remaining = round2(Math.max(0, toCollect - customerReceived));
     const collectionPct = toCollect ? Math.round((customerReceived / toCollect) * 1000) / 10 : 0;
     const milestones = booking.project.brokerageMilestones;
     const unlockedPct = milestones.length
@@ -565,9 +566,77 @@ bookingsRouter.get(
     const dealValue = booking.financials?.totalCost ?? 0;
     const dueAmount = brokerageDueAmount(dealValue, unlockedPct);
     const partnerReceived = booking.entitlement?.received ?? 0;
+    const now = new Date();
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const schedules = booking.schedules.map((s) => {
+      const due = new Date(s.dueDate);
+      const dayMs = 24 * 60 * 60 * 1000;
+      const delta = Math.floor((due.getTime() - startToday.getTime()) / dayMs);
+      const open = s.outstanding > 0.01 && s.status !== "paid";
+      const overdue = open && delta < 0;
+      return {
+        ...s,
+        daysUntilDue: delta,
+        daysOverdue: overdue ? Math.abs(delta) : 0,
+        isOverdue: overdue,
+        isUpcoming: open && delta >= 0,
+        isPaid: s.status === "paid" || s.outstanding <= 0.01,
+      };
+    });
+
+    const overdueRows = schedules.filter((s) => s.isOverdue);
+    const upcomingRows = schedules.filter((s) => s.isUpcoming);
+    const paidRows = schedules.filter((s) => s.isPaid);
+    const nextDue = upcomingRows.sort((a, b) => a.daysUntilDue - b.daysUntilDue)[0] ?? null;
+    const in30 = upcomingRows.filter((s) => s.daysUntilDue <= 30);
+    const in60 = upcomingRows.filter((s) => s.daysUntilDue <= 60);
+
+    const forecastChart = schedules.map((s) => ({
+      id: s.id,
+      name: s.name,
+      dueDate: s.dueDate,
+      expected: round2(s.amount),
+      received: round2(s.received),
+      outstanding: round2(s.outstanding),
+      status: s.isPaid ? "paid" : s.isOverdue ? "overdue" : "upcoming",
+    }));
 
     res.json({
       ...booking,
+      schedules,
+      dashboard: {
+        dealValue: round2(dealValue),
+        toCollect: round2(toCollect),
+        received: customerReceived,
+        remaining,
+        collectionPct,
+        finance: round2(booking.financials?.finance ?? 0),
+        overdueAmount: round2(overdueRows.reduce((s, r) => s + r.outstanding, 0)),
+        overdueCount: overdueRows.length,
+        upcomingAmount: round2(upcomingRows.reduce((s, r) => s + r.outstanding, 0)),
+        upcomingCount: upcomingRows.length,
+        paidCount: paidRows.length,
+        installmentCount: schedules.length,
+        nextDue: nextDue
+          ? {
+              id: nextDue.id,
+              name: nextDue.name,
+              dueDate: nextDue.dueDate,
+              outstanding: round2(nextDue.outstanding),
+              daysUntilDue: nextDue.daysUntilDue,
+            }
+          : null,
+        dueIn30: round2(in30.reduce((s, r) => s + r.outstanding, 0)),
+        dueIn60: round2(in60.reduce((s, r) => s + r.outstanding, 0)),
+      },
+      forecast: {
+        chart: forecastChart,
+        collectionMix: [
+          { name: "Received", value: customerReceived },
+          { name: "Remaining", value: remaining },
+        ],
+      },
       brokerage: {
         mandateTerm: booking.project.mandateTerm,
         agreedMandateBrokerage: booking.project.agreedMandateBrokerage,

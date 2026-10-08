@@ -40,3 +40,16 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+/* Theme-synced react-day-picker surface */
+.rdp-root {
+  --rdp-accent-color: var(--primary);
+  --rdp-accent-background-color: color-mix(in oklab, var(--primary) 16%, transparent);
+  --rdp-background-color: var(--popover);
+  --rdp-day-height: 2rem;
+  --rdp-day-width: 2rem;
+  --rdp-day_button-border-radius: 0.5rem;
+  --rdp-selected-border: 2px solid var(--primary);
+  --rdp-today-color: var(--primary);
+  color: var(--popover-foreground);
+}

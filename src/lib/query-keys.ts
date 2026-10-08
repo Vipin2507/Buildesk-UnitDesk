@@ -30,6 +30,7 @@ export const qk = {
   customers: (filters?: unknown) => ["customers", filters] as const,
   reports: (kind: string, filters?: unknown) =>
     ["reports", kind, filters] as const,
+  reportPresets: ["report-presets"] as const,
   documents: (filters?: unknown) => ["documents", filters] as const,
   reminders: (filters?: unknown) => ["reminders", filters] as const,
   notifications: ["notifications"] as const,

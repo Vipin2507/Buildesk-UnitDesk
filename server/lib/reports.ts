@@ -18,6 +18,21 @@ export function parseMonthParam(raw?: string | null) {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
+/** Parse `yyyy-MM-dd` into start/end of that calendar day. */
+export function parseDayParam(raw?: string | null, end = false) {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [y, m, d] = raw.split("-").map(Number);
+  return end
+    ? new Date(y, m - 1, d, 23, 59, 59, 999)
+    : new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+
+export function parsePctParam(raw?: string | null) {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }

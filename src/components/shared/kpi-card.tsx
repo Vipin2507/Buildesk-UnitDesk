@@ -12,6 +12,8 @@ export function KpiCard({
   active,
   onClick,
   suffix,
+  money,
+  hint,
 }: {
   label: string;
   value: number;
@@ -20,6 +22,8 @@ export function KpiCard({
   active?: boolean;
   onClick?: () => void;
   suffix?: string;
+  money?: boolean;
+  hint?: string;
 }) {
   const reduced = prefersReducedMotion();
   const tones = {
@@ -34,16 +38,20 @@ export function KpiCard({
     <motion.button
       type="button"
       onClick={onClick}
+      disabled={!onClick}
       whileHover={onClick && !reduced ? { y: -1 } : undefined}
       whileTap={onClick && !reduced ? { scale: 0.98 } : undefined}
       transition={{ duration: 0.2, ease: EASE }}
       className={cn(
-        "flex h-full min-w-0 w-full items-center gap-2 rounded-lg border bg-card/60 px-2.5 py-2 text-left transition-[box-shadow,background-color] duration-300",
-        active && "ring-2 ring-primary/40",
-        onClick ? "cursor-pointer" : "cursor-default",
+        "flex h-full min-w-0 w-full items-center gap-2 rounded-lg border bg-card/60 px-2.5 py-2 text-left transition-[box-shadow,background-color,ring] duration-300",
+        active && "bg-primary/5 ring-2 ring-primary/45 shadow-sm",
+        onClick
+          ? "cursor-pointer hover:bg-muted/40 hover:shadow-sm disabled:opacity-100"
+          : "cursor-default disabled:opacity-100",
       )}
+      title={onClick ? hint ?? `Filter by ${label}` : undefined}
     >
-      <span className={cn("flex h-7 w-7 items-center justify-center rounded-md", tones[tone])}>
+      <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-md", tones[tone])}>
         <Icon className="h-3.5 w-3.5" />
       </span>
       <span className="min-w-0 flex-1">
@@ -51,11 +59,22 @@ export function KpiCard({
           {label}
         </span>
         <span className="block text-base font-semibold tabular-nums leading-tight">
+          {money ? <span className="mr-0.5 text-sm font-semibold">₹</span> : null}
           <CountUp value={value} />
           {suffix ? <span className="ml-0.5 text-[10px] font-medium text-muted-foreground">{suffix}</span> : null}
         </span>
+        {hint && onClick ? (
+          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{hint}</span>
+        ) : null}
       </span>
-      {onClick ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
+      {onClick ? (
+        <ChevronRight
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 transition-transform",
+            active ? "text-primary rotate-90" : "text-muted-foreground",
+          )}
+        />
+      ) : null}
     </motion.button>
   );
 }
