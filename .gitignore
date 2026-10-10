@@ -4,6 +4,7 @@ dist
 *.db
 *.db-journal
 /prisma/dev.db
+/prisma/backups
 /uploads
 .DS_Store
 *.log

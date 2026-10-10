@@ -39,6 +39,8 @@ export const qk = {
   audit: (filters?: unknown) => ["audit", filters] as const,
   approvals: (filters?: unknown) => ["approvals", filters] as const,
   settings: ["settings"] as const,
+  databaseStatus: ["database", "status"] as const,
+  databaseBackups: ["database", "backups"] as const,
   masters: (group?: string) => ["masters", group] as const,
   search: (q: string) => ["search", q] as const,
   integrations: ["integrations"] as const,

@@ -29,6 +29,7 @@ import { UsersPage } from "@/pages/users/list";
 import { MastersPage } from "@/pages/masters";
 import { ReportsPage } from "@/pages/reports";
 import { SettingsGeneralPage } from "@/pages/settings";
+import { DatabasePage } from "@/pages/database";
 import { SettingsWorkspace } from "@/components/layout/settings-workspace";
 import { DocumentsPage } from "@/pages/documents";
 import { CrmPage } from "@/pages/crm";
@@ -108,6 +109,7 @@ export default function App() {
                 <Route path="channel-partners/:id" element={<PartnerDashboardPage />} />
                 <Route path="masters" element={<MastersPage />} />
                 <Route path="users" element={<UsersPage />} />
+                <Route path="database" element={<DatabasePage />} />
               </Route>
 
               {/* Legacy redirects */}

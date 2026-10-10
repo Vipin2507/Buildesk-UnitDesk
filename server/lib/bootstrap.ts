@@ -38,7 +38,8 @@ const MASTERS: { group: string; label: string; value: string; sortOrder: number 
   })),
 ];
 
-export async function bootstrapPhase2() {
+/** Masters, integrations, and default settings — safe after a business-data wipe. */
+export async function bootstrapEssentials() {
   if ((await prisma.integration.count()) === 0) {
     await prisma.integration.createMany({ data: INTEGRATIONS });
   }
@@ -52,16 +53,20 @@ export async function bootstrapPhase2() {
   const settings = [
     { key: "requireApprovalForCancel", value: "true" },
     { key: "requireApprovalForConfirm", value: "false" },
-    { key: "orgName", value: "Craving Code" },
-    { key: "orgEmail", value: "hello@cravingcode.in" },
+    { key: "orgName", value: "UnitDesk" },
+    { key: "orgEmail", value: "" },
   ];
   for (const s of settings) {
     await prisma.appSetting.upsert({
       where: { key: s.key },
-      update: s.key === "orgEmail" || s.key === "orgName" ? { value: s.value } : {},
+      update: {},
       create: s,
     });
   }
+}
+
+export async function bootstrapPhase2() {
+  await bootstrapEssentials();
 
   const emailInt = await prisma.integration.findUnique({ where: { provider: "email" } });
   if (emailInt) {

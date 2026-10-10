@@ -22,6 +22,8 @@ import { marketingRouter } from "./routes/marketing.ts";
 import { partnerAuthRouter, partnerPortalRouter, partnerRequired } from "./routes/partner.ts";
 import { bootstrapPhase2 } from "./lib/bootstrap.ts";
 import { startReminderScheduler } from "./lib/notify.ts";
+import { startBackupScheduler } from "./lib/database.ts";
+import { databaseRouter } from "./routes/database.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -63,6 +65,7 @@ app.use("/api/reports", authRequired, reportsRouter);
 app.use("/api/customers", authRequired, customersRouter);
 app.use("/api/integrations", authRequired, integrationsRouter);
 app.use("/api/marketing", authRequired, marketingRouter);
+app.use("/api/database", authRequired, databaseRouter);
 app.use("/api", authRequired, inventoryRouter);
 app.use("/api", authRequired, opsRouter);
 
@@ -84,6 +87,7 @@ bootstrapPhase2()
   .catch((err) => console.error("phase2 bootstrap", err))
   .finally(() => {
     startReminderScheduler(60_000);
+    startBackupScheduler(60 * 60 * 1000);
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`UnitDesk on http://0.0.0.0:${PORT}`);
     });
