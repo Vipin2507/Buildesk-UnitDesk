@@ -14,6 +14,11 @@ import {
   resetTenantAdminPassword,
   tenantUsage,
 } from "../lib/tenant-prisma.ts";
+import {
+  assertEmailAvailable,
+  moveWorkspaceEmail,
+  registerWorkspaceEmail,
+} from "../lib/workspace-email.ts";
 
 type AccountWithPlan = ClientAccount & { plan: Plan };
 
@@ -190,7 +195,7 @@ platformRouter.get(
         maxUnits: row.maxUnits ?? row.plan.maxUnits,
       },
       usage,
-      workspaceUrl: `/t/${row.slug}/login`,
+      workspaceUrl: `/login`,
     });
   }),
 );
@@ -232,8 +237,10 @@ platformRouter.post(
     };
 
     const slug = body.slug.toLowerCase();
+    const adminEmail = body.adminEmail.toLowerCase();
     const clash = await platformPrisma.clientAccount.findUnique({ where: { slug } });
     if (clash) throw new HttpError(409, "Slug already in use");
+    await assertEmailAvailable(adminEmail);
 
     const plan = await platformPrisma.plan.findUnique({ where: { code: body.planCode } });
     if (!plan) throw new HttpError(404, "Plan not found");
@@ -241,7 +248,7 @@ platformRouter.post(
     const provisioned = await provisionTenant({
       slug,
       adminName: body.adminName,
-      adminEmail: body.adminEmail,
+      adminEmail,
       adminPassword: body.adminPassword,
     });
 
@@ -256,11 +263,17 @@ platformRouter.post(
         maxProjects: body.maxProjects ?? null,
         maxUnits: body.maxUnits ?? null,
         dbFile: provisioned.dbFile,
-        adminEmail: body.adminEmail.toLowerCase(),
+        adminEmail,
         adminName: body.adminName,
         notes: body.notes ?? null,
       },
       include: accountInclude(),
+    });
+
+    await registerWorkspaceEmail({
+      email: adminEmail,
+      slug,
+      accountId: created.id,
     });
 
     res.status(201).json({
@@ -270,7 +283,7 @@ platformRouter.post(
         maxProjects: created.maxProjects ?? created.plan.maxProjects,
         maxUnits: created.maxUnits ?? created.plan.maxUnits,
       },
-      workspaceUrl: `/t/${created.slug}/login`,
+      workspaceUrl: `/login`,
     });
   }),
 );
@@ -317,6 +330,16 @@ platformRouter.patch(
       planId = plan.id;
     }
 
+    const nextAdminEmail = body.adminEmail?.toLowerCase();
+    if (nextAdminEmail && nextAdminEmail !== existing.adminEmail) {
+      await moveWorkspaceEmail({
+        fromEmail: existing.adminEmail,
+        toEmail: nextAdminEmail,
+        slug: existing.slug,
+        accountId: existing.id,
+      });
+    }
+
     const updated = await platformPrisma.clientAccount.update({
       where: { id },
       data: {
@@ -331,9 +354,16 @@ platformRouter.patch(
         ...(body.maxUnits !== undefined ? { maxUnits: body.maxUnits } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
         ...(body.adminName != null ? { adminName: body.adminName } : {}),
-        ...(body.adminEmail != null ? { adminEmail: body.adminEmail.toLowerCase() } : {}),
+        ...(nextAdminEmail ? { adminEmail: nextAdminEmail } : {}),
       },
       include: accountInclude(),
+    });
+
+    // Ensure admin email is always indexed for login resolution
+    await registerWorkspaceEmail({
+      email: updated.adminEmail,
+      slug: updated.slug,
+      accountId: updated.id,
     });
 
     res.json({
@@ -343,7 +373,7 @@ platformRouter.patch(
         maxProjects: updated.maxProjects ?? updated.plan.maxProjects,
         maxUnits: updated.maxUnits ?? updated.plan.maxUnits,
       },
-      workspaceUrl: `/t/${updated.slug}/login`,
+      workspaceUrl: `/login`,
     });
   }),
 );

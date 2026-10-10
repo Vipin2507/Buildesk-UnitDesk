@@ -122,9 +122,9 @@ export function PlatformAccountDetailPage() {
         ]}
         actions={
           <Button size="sm" variant="outline" asChild>
-            <a href={data.workspaceUrl} target="_blank" rel="noreferrer">
+            <a href="/login" target="_blank" rel="noreferrer">
               <ExternalLink className="h-3.5 w-3.5" />
-              Open workspace
+              Open login
             </a>
           </Button>
         }

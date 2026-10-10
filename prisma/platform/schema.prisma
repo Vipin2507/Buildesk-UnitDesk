@@ -32,23 +32,37 @@ model Plan {
 }
 
 model ClientAccount {
-  id              String    @id @default(cuid())
+  id              String           @id @default(cuid())
   name            String
-  slug            String    @unique
-  status          String    @default("trial")
+  slug            String           @unique
+  status          String           @default("trial")
   planId          String
-  plan            Plan      @relation(fields: [planId], references: [id])
+  plan            Plan             @relation(fields: [planId], references: [id])
   expiresAt       DateTime?
   maxUsers        Int?
   maxProjects     Int?
   maxUnits        Int?
   dbFile          String
-  adminEmail      String
-  adminName       String    @default("Admin")
+  adminEmail      String           @unique
+  adminName       String           @default("Admin")
   notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  emails          WorkspaceEmail[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([status])
   @@index([planId])
+}
+
+/** Global login directory: email → workspace slug (unique across all clients). */
+model WorkspaceEmail {
+  id        String        @id @default(cuid())
+  email     String        @unique
+  slug      String
+  accountId String
+  account   ClientAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([slug])
 }

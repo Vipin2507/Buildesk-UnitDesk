@@ -272,6 +272,17 @@ employeesRouter.post(
     const email = body.email.toLowerCase();
     const exists = await prisma.employee.findUnique({ where: { email } });
     if (exists) throw new HttpError(409, "A user with this email already exists");
+    if (req.tenant) {
+      const { assertEmailAvailable, registerWorkspaceEmail } = await import(
+        "../lib/workspace-email.ts"
+      );
+      await assertEmailAvailable(email, { allowSlug: req.tenant.slug });
+      await registerWorkspaceEmail({
+        email,
+        slug: req.tenant.slug,
+        accountId: req.tenant.id,
+      });
+    }
     const created = await prisma.employee.create({
       data: {
         name: body.name,
@@ -675,6 +686,15 @@ employeesRouter.patch(
       const email = body.email.toLowerCase();
       const clash = await prisma.employee.findFirst({ where: { email, id: { not: id } } });
       if (clash) throw new HttpError(409, "A user with this email already exists");
+      if (req.tenant && email !== existing.email) {
+        const { moveWorkspaceEmail } = await import("../lib/workspace-email.ts");
+        await moveWorkspaceEmail({
+          fromEmail: existing.email,
+          toEmail: email,
+          slug: req.tenant.slug,
+          accountId: req.tenant.id,
+        });
+      }
     }
 
     const updated = await prisma.employee.update({
@@ -741,6 +761,10 @@ employeesRouter.delete(
     const existing = await prisma.employee.findUnique({ where: { id }, include: { role: true } });
     if (!existing) throw new HttpError(404, "User not found");
     if (existing.role.name === "Super Admin") await assertCanDropSuperAdmin(id);
+    if (req.tenant) {
+      const { unregisterWorkspaceEmail } = await import("../lib/workspace-email.ts");
+      await unregisterWorkspaceEmail(existing.email, req.tenant.slug);
+    }
     await prisma.employee.delete({ where: { id } });
     await audit({
       actorId: user.id,

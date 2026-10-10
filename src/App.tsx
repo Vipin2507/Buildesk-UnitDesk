@@ -157,7 +157,7 @@ export default function App() {
 
           {/* Multi-tenant workspaces */}
           <Route path="/t/:slug" element={<TenantLayout />}>
-            <Route path="login" element={<LoginPage />} />
+            <Route path="login" element={<Navigate to="/login" replace />} />
             <Route path="partner/login" element={<PartnerLoginPage />} />
             <Route element={<PartnerProtectedRoute />}>
               <Route element={<PartnerShell />}>

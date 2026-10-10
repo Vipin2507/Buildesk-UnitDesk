@@ -18,13 +18,7 @@ export function ProtectedRoute() {
   }, [token, slug]);
 
   if (!token) {
-    return (
-      <Navigate
-        to={slug ? `/t/${slug}/login` : getTenantSlug() ? tenantPath("/login") : "/login"}
-        replace
-        state={{ from: location.pathname }}
-      />
-    );
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
   if (user?.kind === "partner") {
     return <Navigate to={tenantPath("/partner")} replace />;

@@ -71,7 +71,7 @@ export function PlatformAccountCreatePage() {
             }}
           />
         </Field>
-        <Field label="Workspace slug">
+        <Field label="Internal workspace id">
           <Input
             className="h-9 font-mono"
             value={slug}
@@ -81,7 +81,7 @@ export function PlatformAccountCreatePage() {
             }}
           />
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Login URL: /t/{slug || "…"}/login
+            Used only for data isolation — users sign in at /login with their email
           </p>
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -125,7 +125,7 @@ export function PlatformAccountCreatePage() {
             <Field label="Name">
               <Input className="h-9" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
             </Field>
-            <Field label="Email">
+            <Field label="Email (unique across all clients)">
               <Input
                 type="email"
                 className="h-9"
