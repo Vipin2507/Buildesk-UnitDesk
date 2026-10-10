@@ -255,3 +255,14 @@ export async function tenantUsage(slug: string) {
     return { users: 0, projects: 0, units: 0, unavailable: true as const };
   }
 }
+
+/** Disconnect client and delete tenant SQLite files from disk. */
+export async function destroyTenantDb(slug: string) {
+  const key = slug.toLowerCase();
+  forgetTenantPrisma(key);
+  const dbPath = tenantDbPath(key);
+  for (const suffix of ["", "-wal", "-shm", "-journal"]) {
+    const p = `${dbPath}${suffix}`;
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  }
+}

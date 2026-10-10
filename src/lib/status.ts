@@ -51,6 +51,9 @@ export const statusTone: Record<
   site_visit: "warning",
   skipped: "muted",
   failed: "danger",
+  trial: "info",
+  suspended: "danger",
+  expired: "muted",
 };
 
 export const statusLabel: Record<string, string> = {
@@ -86,6 +89,9 @@ export const statusLabel: Record<string, string> = {
   site_visit: "Site visit",
   skipped: "Skipped",
   failed: "Failed",
+  trial: "Trial",
+  suspended: "Suspended",
+  expired: "Expired",
 };
 
 export const statusDotClass: Record<string, string> = {

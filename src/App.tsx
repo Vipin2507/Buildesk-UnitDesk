@@ -47,10 +47,13 @@ import { PartnerPortalBookings } from "@/pages/partner-portal/bookings";
 import { PartnerPortalBookingDetail } from "@/pages/partner-portal/booking-detail";
 import { PartnerPortalDocuments } from "@/pages/partner-portal/documents";
 import { PlatformLoginPage } from "@/pages/platform/login";
+import { PlatformDashboardPage } from "@/pages/platform/dashboard";
 import { PlatformAccountsPage } from "@/pages/platform/accounts";
 import { PlatformAccountCreatePage } from "@/pages/platform/account-form";
 import { PlatformAccountDetailPage } from "@/pages/platform/account-detail";
 import { PlatformPlansPage } from "@/pages/platform/plans";
+import { PlatformOperatorsPage } from "@/pages/platform/operators";
+import { PlatformSettingsPage } from "@/pages/platform/settings";
 import { getTenantSlug } from "@/lib/tenant";
 
 const queryClient = new QueryClient({
@@ -131,10 +134,13 @@ export default function App() {
           <Route path="/admin/login" element={<PlatformLoginPage />} />
           <Route element={<PlatformProtectedRoute />}>
             <Route path="/admin" element={<PlatformShell />}>
-              <Route index element={<PlatformAccountsPage />} />
+              <Route index element={<PlatformDashboardPage />} />
+              <Route path="accounts" element={<PlatformAccountsPage />} />
               <Route path="accounts/new" element={<PlatformAccountCreatePage />} />
               <Route path="accounts/:id" element={<PlatformAccountDetailPage />} />
               <Route path="plans" element={<PlatformPlansPage />} />
+              <Route path="operators" element={<PlatformOperatorsPage />} />
+              <Route path="settings" element={<PlatformSettingsPage />} />
             </Route>
           </Route>
 
