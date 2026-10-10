@@ -254,6 +254,8 @@ employeesRouter.post(
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     requirePermission(user, "add");
+    const { assertCanCreateUser } = await import("../lib/plan-limits.ts");
+    await assertCanCreateUser(req); // plan limit for multi-tenant accounts
     const body = req.body as {
       name: string;
       email: string;

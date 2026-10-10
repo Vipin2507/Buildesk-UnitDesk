@@ -416,6 +416,8 @@ inventoryRouter.post(
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     requirePermission(user, "add");
+    const { assertCanCreateUnit } = await import("../lib/plan-limits.ts");
+    await assertCanCreateUnit(req, 1);
     const projectId = String(req.params.id);
     await assertProjectAccess(user, projectId);
     const body = req.body as z.infer<typeof unitWriteSchema>;

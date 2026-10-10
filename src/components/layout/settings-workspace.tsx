@@ -1,17 +1,19 @@
 import { Boxes, Database, Handshake, Settings, Shield, Upload } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@/lib/cn";
+import { tenantPath } from "@/lib/tenant";
 
-const tabs = [
-  { to: "/settings", end: true, label: "General", icon: Settings },
-  { to: "/settings/channel-partners", label: "Channel Partners", icon: Handshake },
-  { to: "/settings/masters", label: "Masters", icon: Boxes },
-  { to: "/settings/users", label: "Users & Roles", icon: Shield },
-  { to: "/settings/bulk-upload", label: "Bulk Upload", icon: Upload },
-  { to: "/settings/database", label: "Database", icon: Database },
+const tabDefs = [
+  { path: "/settings", end: true, label: "General", icon: Settings },
+  { path: "/settings/channel-partners", label: "Channel Partners", icon: Handshake },
+  { path: "/settings/masters", label: "Masters", icon: Boxes },
+  { path: "/settings/users", label: "Users & Roles", icon: Shield },
+  { path: "/settings/bulk-upload", label: "Bulk Upload", icon: Upload },
+  { path: "/settings/database", label: "Database", icon: Database },
 ] as const;
 
 export function SettingsWorkspace() {
+  const tabs = tabDefs.map((t) => ({ ...t, to: tenantPath(t.path) }));
   return (
     <div className="flex min-h-full flex-col">
       <div className="border-b bg-background/95 px-3 pt-3 backdrop-blur sm:px-4">

@@ -1,32 +1,45 @@
 import { Building2 } from "lucide-react";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/shared/field";
 import { api, ApiError } from "@/lib/api";
+import { getTenantSlug, setTenantSlug, tenantPath } from "@/lib/tenant";
 import { useAuthStore, type AuthUser } from "@/stores/auth";
 
 export function PartnerLoginPage() {
   const navigate = useNavigate();
+  const { slug: slugParam } = useParams();
   const setSession = useAuthStore((s) => s.setSession);
+  const [slug, setSlug] = useState(slugParam ?? getTenantSlug() ?? "");
   const [email, setEmail] = useState("sanjay@cravingcode.in");
   const [password, setPassword] = useState("Partner@123");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (slugParam) {
+      setSlug(slugParam);
+      setTenantSlug(slugParam);
+    }
+  }, [slugParam]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
+      const workspace = (slugParam || slug).trim().toLowerCase();
+      if (workspace) setTenantSlug(workspace);
+      else setTenantSlug(null);
       const res = await api.post<{ token: string; user: AuthUser }>("/api/partner-auth/login", {
         email,
         password,
       });
       setSession(res.token, { ...res.user, kind: "partner" });
       toast.success("Partner portal");
-      navigate("/partner");
+      navigate(workspace ? `/t/${workspace}/partner` : "/partner");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Login failed");
     } finally {

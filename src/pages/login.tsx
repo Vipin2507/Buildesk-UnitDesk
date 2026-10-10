@@ -1,6 +1,6 @@
 import { Building2 } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,26 +8,40 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/shared/field";
 import { PasswordInput } from "@/components/shared/password-input";
 import { api, ApiError } from "@/lib/api";
+import { getTenantSlug, setTenantSlug, tenantPath } from "@/lib/tenant";
 import { useAuthStore, type AuthUser } from "@/stores/auth";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { slug: slugParam } = useParams();
   const setSession = useAuthStore((s) => s.setSession);
+  const [slug, setSlug] = useState(slugParam ?? getTenantSlug() ?? "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (slugParam) {
+      setSlug(slugParam);
+      setTenantSlug(slugParam);
+    }
+  }, [slugParam]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
+      const workspace = (slugParam || slug).trim().toLowerCase();
+      if (workspace) setTenantSlug(workspace);
+      else setTenantSlug(null);
+
       const res = await api.post<{ token: string; user: AuthUser }>("/api/auth/login", {
         email,
         password,
       });
       setSession(res.token, { ...res.user, kind: "employee" });
       toast.success("Welcome back");
-      navigate("/");
+      navigate(workspace ? `/t/${workspace}` : "/");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Login failed");
     } finally {
@@ -35,10 +49,13 @@ export function LoginPage() {
     }
   }
 
+  const showSlugField = !slugParam;
+
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="relative hidden overflow-hidden bg-sidebar lg:block">
-        <div className="absolute inset-0 opacity-40"
+        <div
+          className="absolute inset-0 opacity-40"
           style={{
             background:
               "radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--color-primary) 45%, transparent), transparent 42%), radial-gradient(circle at 80% 80%, color-mix(in oklab, var(--color-primary) 25%, transparent), transparent 40%)",
@@ -52,13 +69,16 @@ export function LoginPage() {
             <span className="text-sm font-semibold">Buildesk</span>
           </div>
           <div className="max-w-md space-y-3 text-sidebar-foreground">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Inventory operations</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+              Inventory operations
+            </p>
             <h1 className="text-2xl font-semibold tracking-tight">Build Better Communities</h1>
             <p className="text-sm text-sidebar-foreground/70">
-              One operational desk for companies, projects, unit inventory, bookings, and channel partner collections.
+              One operational desk for companies, projects, unit inventory, bookings, and channel
+              partner collections.
             </p>
           </div>
-          <p className="text-[11px] text-sidebar-foreground/50">UnitDesk · internal admin</p>
+          <p className="text-[11px] text-sidebar-foreground/50">UnitDesk · workspace login</p>
         </div>
       </div>
       <div className="flex items-center justify-center p-5">
@@ -70,10 +90,30 @@ export function LoginPage() {
             <span className="text-sm font-semibold">UnitDesk</span>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Use your UnitDesk employee account.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {slugParam
+              ? `Workspace · ${slugParam}`
+              : "Enter your workspace slug (or leave blank for legacy install)."}
+          </p>
           <form className="mt-5 space-y-3" onSubmit={onSubmit}>
+            {showSlugField ? (
+              <Field label="Workspace slug">
+                <Input
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                  className="h-10 font-mono"
+                  placeholder="acme"
+                  autoComplete="organization"
+                />
+              </Field>
+            ) : null}
             <Field label="Email">
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="h-10" />
+              <Input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
+                className="h-10"
+              />
             </Field>
             <Field label="Password">
               <PasswordInput
@@ -89,7 +129,10 @@ export function LoginPage() {
           </form>
           <p className="mt-4 text-[11px] text-muted-foreground">
             Channel partner?{" "}
-            <a href="/partner/login" className="text-primary hover:underline">
+            <a
+              href={slugParam ? `/t/${slugParam}/partner/login` : tenantPath("/partner/login")}
+              className="text-primary hover:underline"
+            >
               Partner portal
             </a>
           </p>

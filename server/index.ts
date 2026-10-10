@@ -21,10 +21,13 @@ import { integrationsRouter } from "./routes/integrations.ts";
 import { marketingRouter } from "./routes/marketing.ts";
 import { partnerAuthRouter, partnerPortalRouter, partnerRequired } from "./routes/partner.ts";
 import { bootstrapPhase2 } from "./lib/bootstrap.ts";
+import { bootstrapPlatform } from "./lib/platform-bootstrap.ts";
 import { startReminderScheduler } from "./lib/notify.ts";
 import { startBackupScheduler } from "./lib/database.ts";
 import { databaseRouter } from "./routes/database.ts";
 import { bulkImportRouter } from "./routes/bulk-import.ts";
+import { platformRouter } from "./routes/platform.ts";
+import { resolveTenant } from "./middleware/tenant.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -51,6 +54,8 @@ app.use(express.json({ limit: "4mb" }));
 app.use("/uploads", express.static(path.resolve(__dirname, "../uploads")));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.use("/api/platform", platformRouter);
+app.use(resolveTenant);
 app.use("/api/auth", authRouter);
 app.use("/api/partner-auth", partnerAuthRouter);
 app.use("/api/partner-portal", partnerRequired, partnerPortalRouter);
@@ -85,12 +90,13 @@ if (process.env.NODE_ENV === "production") {
 
 app.use(errorHandler);
 
-bootstrapPhase2()
-  .catch((err) => console.error("phase2 bootstrap", err))
-  .finally(() => {
-    startReminderScheduler(60_000);
-    startBackupScheduler(60 * 60 * 1000);
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`UnitDesk on http://0.0.0.0:${PORT}`);
-    });
+Promise.all([
+  bootstrapPlatform().catch((err) => console.error("platform bootstrap", err)),
+  bootstrapPhase2().catch((err) => console.error("phase2 bootstrap", err)),
+]).finally(() => {
+  startReminderScheduler(60_000);
+  startBackupScheduler(60 * 60 * 1000);
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`UnitDesk on http://0.0.0.0:${PORT}`);
   });
+});

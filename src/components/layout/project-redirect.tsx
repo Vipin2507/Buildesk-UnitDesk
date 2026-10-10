@@ -1,4 +1,5 @@
 import { Navigate } from "react-router-dom";
+import { tenantPath } from "@/lib/tenant";
 import { useProjectContextStore } from "@/stores/project-context";
 
 /** Send legacy global routes into the project workspace. */
@@ -11,10 +12,10 @@ export function ProjectRedirect({
   const projectId = useProjectContextStore((s) => s.projectId);
 
   if (projectId && suffix) {
-    return <Navigate to={`/projects/${projectId}/${suffix}`} replace />;
+    return <Navigate to={tenantPath(`/projects/${projectId}/${suffix}`)} replace />;
   }
   if (projectId && !suffix) {
-    return <Navigate to={`/projects/${projectId}`} replace />;
+    return <Navigate to={tenantPath(`/projects/${projectId}`)} replace />;
   }
-  return <Navigate to="/projects" replace />;
+  return <Navigate to={tenantPath("/projects")} replace />;
 }

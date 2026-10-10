@@ -9,16 +9,17 @@ import {
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/cn";
+import { tenantPath } from "@/lib/tenant";
 import { useSidebarStore } from "@/stores/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-const items = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true },
-  { to: "/companies", icon: Building2, label: "Companies" },
-  { to: "/projects", icon: Building, label: "Projects" },
-  { to: "/customers", icon: Users, label: "Customers" },
-  { to: "/reports", icon: FileBarChart, label: "Reports" },
-  { to: "/settings", icon: Settings, label: "Settings" },
+const itemDefs = [
+  { path: "/", icon: LayoutDashboard, label: "Dashboard", end: true },
+  { path: "/companies", icon: Building2, label: "Companies" },
+  { path: "/projects", icon: Building, label: "Projects" },
+  { path: "/customers", icon: Users, label: "Customers" },
+  { path: "/reports", icon: FileBarChart, label: "Reports" },
+  { path: "/settings", icon: Settings, label: "Settings" },
 ];
 
 function RailLink({
@@ -77,6 +78,7 @@ export function Sidebar() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const setMobileOpen = useSidebarStore((s) => s.setMobileOpen);
   const navigate = useNavigate();
+  const items = itemDefs.map((i) => ({ ...i, to: tenantPath(i.path) }));
 
   return (
     <aside
@@ -89,7 +91,7 @@ export function Sidebar() {
       <div className={cn("flex h-14 items-center", collapsed ? "justify-center" : "gap-2 px-2.5")}>
         <button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={() => navigate(tenantPath("/"))}
           className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary shadow-[var(--shadow-brand-glow)]"
         >
           <Building2 className="h-4 w-4 text-white" />

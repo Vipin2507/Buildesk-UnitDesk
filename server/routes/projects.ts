@@ -105,6 +105,8 @@ projectsRouter.post(
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     requirePermission(user, "add");
+    const { assertCanCreateProject } = await import("../lib/plan-limits.ts");
+    await assertCanCreateProject(req);
     const body = req.body as z.infer<typeof projectSchema>;
     const { brokerageMilestones, ...projectBody } = body;
     const created = await prisma.$transaction(async (tx) => {
@@ -250,6 +252,8 @@ projectsRouter.post(
       (sum, wing) => sum + wing.floors.reduce((s, floor) => s + floor.types.length, 0),
       0,
     );
+    const { assertCanCreateUnit } = await import("../lib/plan-limits.ts");
+    await assertCanCreateUnit(req, preview);
     const maxFloors = Math.max(...body.wings.map((w) => w.floors.length));
     const typicalUnits =
       Math.round(

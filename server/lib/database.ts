@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { prisma } from "./prisma.ts";
+import { activeDbPath, prisma } from "./prisma.ts";
 import { HttpError } from "./http.ts";
 import { audit } from "./audit.ts";
 import { bootstrapEssentials } from "./bootstrap.ts";
@@ -21,8 +21,10 @@ async function withLock<T>(fn: () => Promise<T>): Promise<T> {
   return run as Promise<T>;
 }
 
-/** Prisma resolves relative file: URLs against the schema directory (prisma/). */
+/** Active request DB (tenant) or legacy DATABASE_URL. */
 export function resolveDbPath() {
+  const active = activeDbPath();
+  if (active) return active;
   const url = process.env.DATABASE_URL ?? "file:./dev.db";
   const file = url.replace(/^file:/, "").replace(/^\.\//, "");
   if (path.isAbsolute(file)) return file;

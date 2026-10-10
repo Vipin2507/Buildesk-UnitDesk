@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../node_modules/.prisma/platform-client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("PLATFORM_DATABASE_URL")
+}
+
+model PlatformUser {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Plan {
+  id          String          @id @default(cuid())
+  code        String          @unique
+  name        String
+  maxUsers    Int             @default(5)
+  maxProjects Int             @default(3)
+  maxUnits    Int             @default(500)
+  sortOrder   Int             @default(0)
+  accounts    ClientAccount[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model ClientAccount {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  status          String    @default("trial")
+  planId          String
+  plan            Plan      @relation(fields: [planId], references: [id])
+  expiresAt       DateTime?
+  maxUsers        Int?
+  maxProjects     Int?
+  maxUnits        Int?
+  dbFile          String
+  adminEmail      String
+  adminName       String    @default("Admin")
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([planId])
+}

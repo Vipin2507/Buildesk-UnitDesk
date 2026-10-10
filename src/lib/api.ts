@@ -1,3 +1,5 @@
+import { getTenantSlug, setTenantSlug, tenantPath } from "@/lib/tenant";
+
 const TOKEN_KEY = "unitdesk.token";
 
 export class ApiError extends Error {
@@ -44,13 +46,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
+  const slug = getTenantSlug();
+  if (slug && path.startsWith("/api/") && !path.startsWith("/api/platform")) {
+    headers.set("X-Tenant-Slug", slug);
+  }
 
   const res = await fetch(path, { ...init, headers });
-  const isLogin = path.includes("/api/auth/login") || path.includes("/api/partner-auth/login");
+  const isLogin =
+    path.includes("/api/auth/login") || path.includes("/api/partner-auth/login");
   if (res.status === 401 && !isLogin) {
     setToken(null);
-    const partner = location.pathname.startsWith("/partner");
-    const dest = partner ? "/partner/login" : "/login";
+    const partner = location.pathname.includes("/partner");
+    const dest = partner
+      ? tenantPath("/partner/login")
+      : getTenantSlug()
+        ? tenantPath("/login")
+        : "/login";
     if (location.pathname !== dest) location.assign(dest);
   }
 
@@ -83,3 +94,5 @@ export type ListResponse<T> = {
   page: number;
   pageSize: number;
 };
+
+export { setTenantSlug, getTenantSlug, tenantPath };

@@ -1,19 +1,21 @@
 import { FileText, Handshake, LayoutDashboard, CalendarCheck } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
+import { tenantPath } from "@/lib/tenant";
 import { useAuthStore } from "@/stores/auth";
 import { Button } from "@/components/ui/button";
 
-const items = [
-  { to: "/partner", icon: LayoutDashboard, label: "Dashboard", end: true },
-  { to: "/partner/bookings", icon: CalendarCheck, label: "Bookings" },
-  { to: "/partner/documents", icon: FileText, label: "Documents" },
+const itemDefs = [
+  { path: "/partner", icon: LayoutDashboard, label: "Dashboard", end: true },
+  { path: "/partner/bookings", icon: CalendarCheck, label: "Bookings" },
+  { path: "/partner/documents", icon: FileText, label: "Documents" },
 ];
 
 export function PartnerShell() {
   const user = useAuthStore((s) => s.user);
   const clear = useAuthStore((s) => s.clear);
   const navigate = useNavigate();
+  const items = itemDefs.map((i) => ({ ...i, to: tenantPath(i.path) }));
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -54,7 +56,7 @@ export function PartnerShell() {
             variant="outline"
             onClick={() => {
               clear();
-              navigate("/partner/login");
+              navigate(tenantPath("/partner/login"));
             }}
           >
             Sign out

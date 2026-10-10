@@ -147,6 +147,8 @@ companiesRouter.post(
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     requirePermission(user, "add");
+    const { assertCanCreateProject } = await import("../lib/plan-limits.ts");
+    await assertCanCreateProject(req);
     const body = req.body as z.infer<typeof companyProjectSchema>;
     const { brokerageMilestones, ...projectBody } = body;
     const created = await prisma.$transaction(async (tx) => {
