@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { platformPrisma } from "../lib/platform-prisma.ts";
+import { platformPrisma, type ClientAccount, type Plan } from "../lib/platform-prisma.ts";
 import { asyncHandler, HttpError, listMeta, listResult } from "../lib/http.ts";
 import { validate } from "../middleware/validate.ts";
 import {
@@ -14,6 +14,8 @@ import {
   resetTenantAdminPassword,
   tenantUsage,
 } from "../lib/tenant-prisma.ts";
+
+type AccountWithPlan = ClientAccount & { plan: Plan };
 
 export const platformRouter = Router();
 
@@ -73,14 +75,14 @@ platformRouter.get(
       }),
     ]);
     const plans = await platformPrisma.plan.findMany();
-    const planMap = Object.fromEntries(plans.map((p) => [p.id, p.code]));
+    const planMap = Object.fromEntries(plans.map((p: Plan) => [p.id, p.code]));
     res.json({
       total,
       active,
       trial,
       suspended,
       expired,
-      byPlan: byPlan.map((r) => ({
+      byPlan: byPlan.map((r: { planId: string; _count: { _all: number } }) => ({
         planId: r.planId,
         planCode: planMap[r.planId] ?? "?",
         count: r._count._all,
@@ -153,7 +155,7 @@ platformRouter.get(
     ]);
 
     const data = await Promise.all(
-      rows.map(async (row) => {
+      rows.map(async (row: AccountWithPlan) => {
         const usage = await tenantUsage(row.slug);
         return {
           ...row,

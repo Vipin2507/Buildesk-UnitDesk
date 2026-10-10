@@ -7,7 +7,6 @@ dist
 /prisma/platform.db
 /prisma/tenants
 /prisma/backups
-/node_modules/.prisma/platform-client
 /uploads
 .DS_Store
 *.log

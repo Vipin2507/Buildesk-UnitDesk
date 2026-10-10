@@ -50,8 +50,10 @@ jobs:
             mkdir -p uploads
             npm ci
             npx prisma generate
+            npx prisma generate --schema=prisma/platform/schema.prisma
             npx tsx scripts/migrate-booking-financials.ts
             npx prisma db push
+            npx prisma db push --schema=prisma/platform/schema.prisma
             npm run build
 
             export NODE_ENV=production

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from ".prisma/platform-client";
+import { PrismaClient } from "@prisma/platform-client";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -32,3 +32,5 @@ export function platformDbFilePath() {
   const url = platformDbUrl();
   return url.replace(/^file:/, "");
 }
+
+export type { Plan, ClientAccount, PlatformUser } from "@prisma/platform-client";
