@@ -1,4 +1,4 @@
-import { Boxes, Database, Handshake, Settings, Shield } from "lucide-react";
+import { Boxes, Database, Handshake, Settings, Shield, Upload } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@/lib/cn";
 
@@ -7,6 +7,7 @@ const tabs = [
   { to: "/settings/channel-partners", label: "Channel Partners", icon: Handshake },
   { to: "/settings/masters", label: "Masters", icon: Boxes },
   { to: "/settings/users", label: "Users & Roles", icon: Shield },
+  { to: "/settings/bulk-upload", label: "Bulk Upload", icon: Upload },
   { to: "/settings/database", label: "Database", icon: Database },
 ] as const;
 

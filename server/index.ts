@@ -24,6 +24,7 @@ import { bootstrapPhase2 } from "./lib/bootstrap.ts";
 import { startReminderScheduler } from "./lib/notify.ts";
 import { startBackupScheduler } from "./lib/database.ts";
 import { databaseRouter } from "./routes/database.ts";
+import { bulkImportRouter } from "./routes/bulk-import.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -66,6 +67,7 @@ app.use("/api/customers", authRequired, customersRouter);
 app.use("/api/integrations", authRequired, integrationsRouter);
 app.use("/api/marketing", authRequired, marketingRouter);
 app.use("/api/database", authRequired, databaseRouter);
+app.use("/api/bulk-import", authRequired, bulkImportRouter);
 app.use("/api", authRequired, inventoryRouter);
 app.use("/api", authRequired, opsRouter);
 

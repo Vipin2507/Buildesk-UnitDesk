@@ -41,6 +41,7 @@ export const qk = {
   settings: ["settings"] as const,
   databaseStatus: ["database", "status"] as const,
   databaseBackups: ["database", "backups"] as const,
+  bulkImportKinds: ["bulk-import", "kinds"] as const,
   masters: (group?: string) => ["masters", group] as const,
   search: (q: string) => ["search", q] as const,
   integrations: ["integrations"] as const,
