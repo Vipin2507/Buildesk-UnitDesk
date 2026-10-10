@@ -47,8 +47,19 @@ jobs:
               exit 1
             fi
 
-            mkdir -p uploads
+            # Ensure platform multi-client vars exist on older installs
+            grep -qE '^PLATFORM_DATABASE_URL=' .env || echo 'PLATFORM_DATABASE_URL="file:../platform.db"' >> .env
+            grep -qE '^LEGACY_SINGLE_DB=' .env || echo 'LEGACY_SINGLE_DB="true"' >> .env
+            grep -qE '^PLATFORM_ADMIN_EMAIL=' .env || echo 'PLATFORM_ADMIN_EMAIL="platform@buildesk.com"' >> .env
+            grep -qE '^PLATFORM_ADMIN_PASSWORD=' .env || echo 'PLATFORM_ADMIN_PASSWORD="Platform@123"' >> .env
+            grep -qE '^PLATFORM_ADMIN_NAME=' .env || echo 'PLATFORM_ADMIN_NAME="Platform Admin"' >> .env
+
+            mkdir -p uploads prisma/tenants
             npm ci
+            set -a
+            # shellcheck disable=SC1091
+            . ./.env
+            set +a
             npx prisma generate
             npx prisma generate --schema=prisma/platform/schema.prisma
             npx tsx scripts/migrate-booking-financials.ts
