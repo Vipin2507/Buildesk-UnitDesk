@@ -246,10 +246,12 @@ inventoryRouter.get(
     await assertProjectAccess(user, projectId);
     const { page, pageSize, skip, take } = listMeta(req);
     const search = String(req.query.search ?? "").trim();
+    const wingId = req.query.wingId ? String(req.query.wingId) : null;
     const where = {
       floor: {
         wing: {
           projectId,
+          ...(wingId ? { id: wingId } : {}),
           ...(req.query.wing ? { name: String(req.query.wing) } : {}),
         },
         ...(req.query.floor ? { number: Number(req.query.floor) } : {}),

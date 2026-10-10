@@ -98,7 +98,17 @@ employeesRouter.get(
         skip,
         take,
         orderBy: { name: "asc" },
-        include: { role: true, access: { include: { project: true, wing: true } } },
+        include: {
+          role: true,
+          access: {
+            include: {
+              project: true,
+              wing: true,
+              unit: { include: { floor: { include: { wing: true } } } },
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
       }),
       prisma.employee.count({ where }),
     ]);
@@ -269,7 +279,17 @@ employeesRouter.post(
         status: body.status ?? "active",
         passwordHash: await bcrypt.hash(body.password, 10),
       },
-      include: { role: true, access: { include: { project: true, wing: true } } },
+      include: {
+          role: true,
+          access: {
+            include: {
+              project: true,
+              wing: true,
+              unit: { include: { floor: { include: { wing: true } } } },
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
     });
 
     // Super Admin gets every project by default
@@ -287,9 +307,86 @@ employeesRouter.post(
     });
     const refreshed = await prisma.employee.findUnique({
       where: { id: created.id },
-      include: { role: true, access: { include: { project: true, wing: true } } },
+      include: {
+          role: true,
+          access: {
+            include: {
+              project: true,
+              wing: true,
+              unit: { include: { floor: { include: { wing: true } } } },
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
     });
     res.status(201).json(publicEmployee(refreshed!));
+  }),
+);
+
+const accessInclude = {
+  project: true,
+  wing: true,
+  unit: { include: { floor: { include: { wing: true } } } },
+  employee: { select: { id: true, name: true, email: true } },
+} as const;
+
+async function resolveAccessScope(input: {
+  projectId: string;
+  wingId?: string | null;
+  unitId?: string | null;
+}) {
+  let wingId = input.wingId || null;
+  let unitId = input.unitId || null;
+
+  if (unitId) {
+    const unit = await prisma.unit.findUnique({
+      where: { id: unitId },
+      include: { floor: { include: { wing: true } } },
+    });
+    if (!unit) throw new HttpError(404, "Unit not found");
+    if (unit.floor.wing.projectId !== input.projectId) {
+      throw new HttpError(422, "Unit does not belong to this project");
+    }
+    wingId = unit.floor.wingId;
+  } else if (wingId) {
+    const wing = await prisma.wing.findUnique({ where: { id: wingId } });
+    if (!wing) throw new HttpError(404, "Wing not found");
+    if (wing.projectId !== input.projectId) {
+      throw new HttpError(422, "Wing does not belong to this project");
+    }
+  }
+
+  return { wingId, unitId };
+}
+
+function scopeLabel(wingId: string | null, unitId: string | null) {
+  if (unitId) return "unit";
+  if (wingId) return "wing";
+  return "project";
+}
+
+employeesRouter.get(
+  "/access",
+  asyncHandler(async (req, res) => {
+    const employeeId = req.query.employeeId ? String(req.query.employeeId) : null;
+    const projectId = req.query.projectId ? String(req.query.projectId) : null;
+    const data = await prisma.projectAccess.findMany({
+      where: {
+        ...(employeeId ? { employeeId } : {}),
+        ...(projectId ? { projectId } : {}),
+      },
+      include: accessInclude,
+      orderBy: { createdAt: "desc" },
+    });
+    res.json({
+      data: data.map((row) => ({
+        ...row,
+        scope: scopeLabel(row.wingId, row.unitId),
+      })),
+      total: data.length,
+      page: 1,
+      pageSize: data.length,
+    });
   }),
 );
 
@@ -298,9 +395,18 @@ employeesRouter.get(
   asyncHandler(async (req, res) => {
     const data = await prisma.projectAccess.findMany({
       where: { employeeId: String(req.params.id) },
-      include: { project: true, wing: true, unit: true },
+      include: accessInclude,
+      orderBy: { createdAt: "desc" },
     });
-    res.json({ data, total: data.length, page: 1, pageSize: data.length });
+    res.json({
+      data: data.map((row) => ({
+        ...row,
+        scope: scopeLabel(row.wingId, row.unitId),
+      })),
+      total: data.length,
+      page: 1,
+      pageSize: data.length,
+    });
   }),
 );
 
@@ -312,6 +418,8 @@ employeesRouter.post(
       projectId: z.string(),
       wingId: z.string().optional().nullable(),
       unitId: z.string().optional().nullable(),
+      /** When granting full project, drop narrower wing/unit rows for the same project */
+      replaceNarrower: z.boolean().optional(),
     }),
   ),
   asyncHandler(async (req, res) => {
@@ -322,27 +430,73 @@ employeesRouter.post(
       projectId: string;
       wingId?: string | null;
       unitId?: string | null;
+      replaceNarrower?: boolean;
     };
     const employee = await prisma.employee.findUnique({ where: { id: body.employeeId } });
     if (!employee) throw new HttpError(404, "User not found");
     const project = await prisma.project.findUnique({ where: { id: body.projectId } });
     if (!project) throw new HttpError(404, "Project not found");
+
+    const { wingId, unitId } = await resolveAccessScope({
+      projectId: body.projectId,
+      wingId: body.wingId,
+      unitId: body.unitId,
+    });
+
     const duplicate = await prisma.projectAccess.findFirst({
       where: {
         employeeId: body.employeeId,
         projectId: body.projectId,
-        wingId: body.wingId ?? null,
-        unitId: body.unitId ?? null,
+        wingId,
+        unitId,
       },
     });
     if (duplicate) throw new HttpError(409, "This access is already granted");
+
+    // Broader grant already covers this scope
+    const broader = await prisma.projectAccess.findFirst({
+      where: {
+        employeeId: body.employeeId,
+        projectId: body.projectId,
+        OR: [
+          { wingId: null, unitId: null },
+          ...(wingId && unitId ? [{ wingId, unitId: null }] : []),
+        ],
+      },
+    });
+    if (broader && (wingId || unitId)) {
+      throw new HttpError(409, "Already covered by broader project/wing access");
+    }
+
+    if ((body.replaceNarrower || (!wingId && !unitId)) && !wingId && !unitId) {
+      await prisma.projectAccess.deleteMany({
+        where: {
+          employeeId: body.employeeId,
+          projectId: body.projectId,
+          OR: [{ wingId: { not: null } }, { unitId: { not: null } }],
+        },
+      });
+    }
+
+    if (wingId && !unitId) {
+      await prisma.projectAccess.deleteMany({
+        where: {
+          employeeId: body.employeeId,
+          projectId: body.projectId,
+          wingId,
+          unitId: { not: null },
+        },
+      });
+    }
+
     const created = await prisma.projectAccess.create({
       data: {
         employeeId: body.employeeId,
         projectId: body.projectId,
-        wingId: body.wingId || null,
-        unitId: body.unitId || null,
+        wingId,
+        unitId,
       },
+      include: accessInclude,
     });
     await audit({
       actorId: user.id,
@@ -351,9 +505,83 @@ employeesRouter.post(
       entityType: "project_access",
       entityId: created.id,
       projectId: body.projectId,
-      meta: { employeeId: body.employeeId },
+      meta: {
+        employeeId: body.employeeId,
+        scope: scopeLabel(wingId, unitId),
+        wingId,
+        unitId,
+      },
     });
-    res.status(201).json(created);
+    res.status(201).json({ ...created, scope: scopeLabel(wingId, unitId) });
+  }),
+);
+
+employeesRouter.post(
+  "/access/bulk",
+  validate(
+    z.object({
+      employeeId: z.string(),
+      grants: z
+        .array(
+          z.object({
+            projectId: z.string(),
+            wingId: z.string().optional().nullable(),
+            unitId: z.string().optional().nullable(),
+          }),
+        )
+        .min(1)
+        .max(100),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const user = requireUser(req);
+    requirePermission(user, "approve");
+    const body = req.body as {
+      employeeId: string;
+      grants: Array<{ projectId: string; wingId?: string | null; unitId?: string | null }>;
+    };
+    const employee = await prisma.employee.findUnique({ where: { id: body.employeeId } });
+    if (!employee) throw new HttpError(404, "User not found");
+
+    const created = [];
+    for (const g of body.grants) {
+      const project = await prisma.project.findUnique({ where: { id: g.projectId } });
+      if (!project) continue;
+      const scope = await resolveAccessScope({
+        projectId: g.projectId,
+        wingId: g.wingId,
+        unitId: g.unitId,
+      });
+      const exists = await prisma.projectAccess.findFirst({
+        where: {
+          employeeId: body.employeeId,
+          projectId: g.projectId,
+          wingId: scope.wingId,
+          unitId: scope.unitId,
+        },
+      });
+      if (exists) continue;
+      const row = await prisma.projectAccess.create({
+        data: {
+          employeeId: body.employeeId,
+          projectId: g.projectId,
+          wingId: scope.wingId,
+          unitId: scope.unitId,
+        },
+        include: accessInclude,
+      });
+      created.push({ ...row, scope: scopeLabel(scope.wingId, scope.unitId) });
+    }
+
+    await audit({
+      actorId: user.id,
+      actorName: user.name,
+      action: "employee.access.bulk_grant",
+      entityType: "project_access",
+      entityId: body.employeeId,
+      meta: { count: created.length },
+    });
+    res.status(201).json({ data: created, total: created.length });
   }),
 );
 
@@ -375,7 +603,7 @@ employeesRouter.delete(
       projectId: existing.projectId,
       meta: { employeeId: existing.employeeId },
     });
-    res.json({ ok: true });
+    res.json({ ok: true, employeeId: existing.employeeId, projectId: existing.projectId });
   }),
 );
 
@@ -384,7 +612,17 @@ employeesRouter.get(
   asyncHandler(async (req, res) => {
     const row = await prisma.employee.findUnique({
       where: { id: String(req.params.id) },
-      include: { role: true, access: { include: { project: true, wing: true } } },
+      include: {
+          role: true,
+          access: {
+            include: {
+              project: true,
+              wing: true,
+              unit: { include: { floor: { include: { wing: true } } } },
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
     });
     if (!row) throw new HttpError(404, "User not found");
     res.json(publicEmployee(row));
@@ -447,7 +685,17 @@ employeesRouter.patch(
         ...(body.status ? { status: body.status } : {}),
         ...(body.password ? { passwordHash: await bcrypt.hash(body.password, 10) } : {}),
       },
-      include: { role: true, access: { include: { project: true, wing: true } } },
+      include: {
+          role: true,
+          access: {
+            include: {
+              project: true,
+              wing: true,
+              unit: { include: { floor: { include: { wing: true } } } },
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
     });
 
     if (isSuperAdminRole(updated.role)) {
@@ -465,7 +713,17 @@ employeesRouter.patch(
     });
     const refreshed = await prisma.employee.findUnique({
       where: { id },
-      include: { role: true, access: { include: { project: true, wing: true } } },
+      include: {
+          role: true,
+          access: {
+            include: {
+              project: true,
+              wing: true,
+              unit: { include: { floor: { include: { wing: true } } } },
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
     });
     res.json(publicEmployee(refreshed!));
   }),

@@ -24,7 +24,9 @@ export const qk = {
   employeesSummary: ["employees", "summary"] as const,
   partnersSummary: ["channel-partners", "summary"] as const,
   roles: ["roles"] as const,
-  access: (employeeId: string) => ["access", employeeId] as const,
+  access: (employeeId?: string) =>
+    employeeId ? (["access", employeeId] as const) : (["access"] as const),
+  accessList: (filters?: unknown) => ["access", "list", filters] as const,
   commissionRules: (projectId: string) =>
     ["commission-rules", projectId] as const,
   customers: (filters?: unknown) => ["customers", filters] as const,

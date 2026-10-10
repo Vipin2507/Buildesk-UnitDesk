@@ -34,8 +34,16 @@ export async function assertProjectAccess(
   }
 
   if (scope?.wingId) {
-    const ok = rows.some((r) => r.wingId === scope.wingId);
-    if (!ok) throw new HttpError(403, "No access to this wing");
+    const wingOk = rows.some((r) => r.wingId === scope.wingId && !r.unitId);
+    if (wingOk) return;
+    const unitIds = rows.map((r) => r.unitId).filter((id): id is string => Boolean(id));
+    if (unitIds.length) {
+      const inWing = await prisma.unit.count({
+        where: { id: { in: unitIds }, floor: { wingId: scope.wingId } },
+      });
+      if (inWing > 0) return;
+    }
+    throw new HttpError(403, "No access to this wing");
   }
 }
 
