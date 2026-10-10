@@ -104,11 +104,20 @@ export function LoginPage() {
               {loading ? "Signing in…" : "Continue"}
             </Button>
           </form>
-          <p className="mt-4 text-[11px] text-muted-foreground">
+          <div className="mt-4 space-y-1 rounded-md border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+            <p className="font-medium text-foreground">Demo account</p>
+            <p>
+              <span className="text-foreground">vipin@cravingcode.in</span> / Admin@123
+            </p>
+            <p className="text-[10px]">Sales: rahul@cravingcode.in / Sales@123</p>
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">
             Channel partner?{" "}
             <a href="/partner/login" className="text-primary hover:underline">
               Partner portal
             </a>
+            {" · "}
+            <span className="text-[10px]">sanjay@cravingcode.in / Partner@123</span>
           </p>
         </div>
       </div>

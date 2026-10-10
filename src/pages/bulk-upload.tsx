@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageWrap } from "@/components/shared/page-wrap";
 import { Button } from "@/components/ui/button";
-import { api, ApiError, getToken } from "@/lib/api";
+import { api, apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { qk } from "@/lib/query-keys";
 import { useAuthStore } from "@/stores/auth";
@@ -60,10 +60,7 @@ function fail(err: unknown, fallback: string) {
 }
 
 async function downloadSheetTemplate(kind: string, sheetName: string) {
-  const token = getToken();
-  const res = await fetch(`/api/bulk-import/templates/${kind}?format=xlsx`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await apiFetch(`/api/bulk-import/templates/${kind}?format=xlsx`);
   if (!res.ok) throw new ApiError("Template download failed", res.status);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
@@ -79,16 +76,10 @@ async function downloadSheetTemplate(kind: string, sheetName: string) {
 async function importSheet(kind: string, file: File, dryRun: boolean) {
   const fd = new FormData();
   fd.append("file", file);
-  const token = getToken();
-  const res = await fetch(`/api/bulk-import/${kind}?dryRun=${dryRun ? "true" : "false"}`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: fd,
-  });
-  const text = await res.text();
-  const json = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(json?.message ?? "Import failed", res.status);
-  return json as ImportResult;
+  return api.upload<ImportResult>(
+    `/api/bulk-import/${kind}?dryRun=${dryRun ? "true" : "false"}`,
+    fd,
+  );
 }
 
 export function BulkUploadPage() {

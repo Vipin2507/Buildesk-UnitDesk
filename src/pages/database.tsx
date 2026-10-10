@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { api, ApiError, getToken, type ListResponse } from "@/lib/api";
+import { api, apiFetch, ApiError, type ListResponse } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { useAuthStore } from "@/stores/auth";
 import { cn } from "@/lib/cn";
@@ -85,10 +85,9 @@ function formatWhen(iso: string) {
 }
 
 async function downloadBackupFile(name: string) {
-  const token = getToken();
-  const res = await fetch(`/api/database/backups/${encodeURIComponent(name)}/download`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await apiFetch(
+    `/api/database/backups/${encodeURIComponent(name)}/download`,
+  );
   if (!res.ok) {
     let message = "Download failed";
     try {

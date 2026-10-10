@@ -163,13 +163,17 @@ NODE_ENV=development
 
 Production uses `file:./prod.db` on the server. Never commit real secrets.
 
-### Demo logins (after seed)
+### Demo workspace (platform client `demo`)
+
+Created automatically on server start (or `npm run db:seed:demo`). Sign in at `/login` — workspace is detected from email.
 
 | Role | Email | Password |
 | --- | --- | --- |
 | Super admin | `ivan.p@example.net` | `Admin@123` |
 | Sales | `peter.m@example.com` | `Sales@123` |
 | Partner portal | `alice.j@example.com` | `Partner@123` |
+
+Platform control plane: `/admin/login` · `platform@buildesk.com` / `Platform@123`
 
 ### Useful scripts
 

@@ -75,4 +75,12 @@ export async function bootstrapPlatform() {
   }
 
   await syncWorkspaceEmailDirectory();
+
+  // Demo client with full seed data (companies, projects, bookings, …)
+  try {
+    const { ensureDemoWorkspace } = await import("./demo-workspace.ts");
+    await ensureDemoWorkspace();
+  } catch (err) {
+    console.error("demo workspace bootstrap", err);
+  }
 }
