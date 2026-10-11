@@ -152,7 +152,7 @@ export const IMPORT_KINDS: KindMeta[] = [
       { key: "base_price", label: "Base price" },
       { key: "plc", label: "PLC" },
       { key: "other_charges", label: "Other charges" },
-      { key: "status", label: "Status", hint: "available | hold | blocked | …" },
+      { key: "status", label: "Status", hint: "available | hold | blocked | not_available (use Bookings sheet for sold)" },
       { key: "remarks", label: "Remarks" },
     ],
     sample: [
@@ -189,7 +189,7 @@ export const IMPORT_KINDS: KindMeta[] = [
       { key: "project_code", label: "Project code", required: true },
       { key: "unit_number", label: "Unit number", required: true },
       { key: "booking_date", label: "Booking date", required: true },
-      { key: "status", label: "Status", hint: "booked | confirmed | hold" },
+      { key: "status", label: "Status", hint: "booked | confirmed | sold | hold" },
       { key: "customer_name", label: "Customer name", required: true },
       { key: "customer_mobile", label: "Customer mobile", required: true },
       { key: "customer_email", label: "Customer email" },
@@ -625,7 +625,37 @@ async function importUnits(
     const key = `${projectCode}/${unitNumber}`;
     const existing = await prisma.unit.findFirst({
       where: { unitNumber, floor: { wing: { projectId: project.id } } },
+      include: { bookings: { where: { status: { not: "cancelled" } }, take: 1 } },
     });
+    const statusRaw = (cell(row, "status") || "available").toLowerCase().trim().replace(/\s+/g, "_");
+    const inventoryStatuses = ["available", "hold", "blocked", "not_available"] as const;
+    if (["sold", "booked", "confirmed"].includes(statusRaw)) {
+      outcomes.push({
+        row: rowNum,
+        status: "error",
+        message: `Status "${statusRaw}" belongs on the Bookings sheet (use confirmed/sold there)`,
+        key,
+      });
+      continue;
+    }
+    if (!inventoryStatuses.includes(statusRaw as (typeof inventoryStatuses)[number])) {
+      outcomes.push({
+        row: rowNum,
+        status: "error",
+        message: `Invalid status "${cell(row, "status")}". Use available | hold | blocked | not_available`,
+        key,
+      });
+      continue;
+    }
+    if (existing?.bookings?.length && statusRaw !== existing.status.toLowerCase()) {
+      outcomes.push({
+        row: rowNum,
+        status: "error",
+        message: `Unit ${unitNumber} has an active booking — status is managed by the booking`,
+        key,
+      });
+      continue;
+    }
     const unitData = {
       unitType: cell(row, "unit_type") || null,
       configuration: cell(row, "configuration") || null,
@@ -638,7 +668,7 @@ async function importUnits(
       plc: num(row, "plc"),
       otherCharges: num(row, "other_charges"),
       remarks: cell(row, "remarks") || null,
-      status: cell(row, "status") || "available",
+      status: statusRaw,
     };
     if (opts.dryRun) {
       outcomes.push({
@@ -665,9 +695,14 @@ async function importUnits(
       update: {},
     });
     if (existing) {
+      // Keep booking-driven status if a booking already owns this unit
+      const data =
+        existing.bookings.length > 0
+          ? (({ status: _s, ...rest }) => rest)(unitData)
+          : unitData;
       await prisma.unit.update({
         where: { id: existing.id },
-        data: { ...unitData, floorId: floor.id },
+        data: { ...data, floorId: floor.id },
       });
       outcomes.push({ row: rowNum, status: "updated", message: `Updated ${key}`, key });
     } else {
@@ -757,7 +792,14 @@ async function importBookings(
       });
       continue;
     }
-    if (!["available", "hold"].includes(unit.status)) {
+    const currentUnitStatus = String(unit.status ?? "").toLowerCase().trim();
+    const freeStatuses = ["available", "hold"];
+    const staleSaleStatuses = ["sold", "booked", "confirmed"];
+    // Blocked / not_available stay rejected; stale sold/booked with no booking can be healed here
+    if (
+      !freeStatuses.includes(currentUnitStatus) &&
+      !staleSaleStatuses.includes(currentUnitStatus)
+    ) {
       outcomes.push({
         row: rowNum,
         status: "error",
@@ -767,7 +809,8 @@ async function importBookings(
       continue;
     }
 
-    const statusRaw = (cell(row, "status") || "booked").toLowerCase();
+    let statusRaw = (cell(row, "status") || "booked").toLowerCase().trim();
+    if (statusRaw === "sold") statusRaw = "confirmed";
     const status = ["booked", "confirmed", "hold"].includes(statusRaw) ? statusRaw : "booked";
     const finance = num(row, "finance") ?? 0;
     const valueToBeCollected = num(row, "value_to_be_collected") ?? totalCost;

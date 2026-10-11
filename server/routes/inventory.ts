@@ -19,6 +19,34 @@ function unitListPrice(u: {
   return round2((u.basePrice ?? 0) + (u.plc ?? 0) + (u.otherCharges ?? 0));
 }
 
+const UNIT_STATUSES = [
+  "available",
+  "hold",
+  "booked",
+  "sold",
+  "blocked",
+  "not_available",
+] as const;
+
+/** Prefer booking-driven status; normalize casing from bulk uploads. */
+function effectiveUnitStatus(
+  unitStatus: string,
+  booking?: { status: string } | null,
+): string {
+  if (booking && booking.status !== "cancelled") {
+    if (booking.status === "hold") return "hold";
+    if (booking.status === "confirmed") return "sold";
+    if (booking.status === "booked") return "booked";
+  }
+  const s = String(unitStatus ?? "available")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_");
+  if (s === "notavailable") return "not_available";
+  if ((UNIT_STATUSES as readonly string[]).includes(s)) return s;
+  return "available";
+}
+
 inventoryRouter.get(
   "/projects/:id/inventory",
   asyncHandler(async (req, res) => {
@@ -64,7 +92,9 @@ inventoryRouter.get(
     const bookingByUnit = new Map(bookings.map((b) => [b.unitId, b]));
 
     const allUnits = wings.flatMap((w) => w.floors.flatMap((f) => f.units));
-    const countBy = (status: string) => allUnits.filter((u) => u.status === status).length;
+    const statusOf = (u: { id: string; status: string }) =>
+      effectiveUnitStatus(u.status, bookingByUnit.get(u.id) ?? null);
+    const countBy = (status: string) => allUnits.filter((u) => statusOf(u) === status).length;
     const kpis = {
       total: allUnits.length || project.totalUnits,
       available: countBy("available"),
@@ -102,7 +132,10 @@ inventoryRouter.get(
 
     const totalRemaining = round2(
       allUnits
-        .filter((u) => u.status === "available" || u.status === "hold")
+        .filter((u) => {
+          const st = statusOf(u);
+          return st === "available" || st === "hold";
+        })
         .reduce((s, u) => s + unitListPrice(u), 0),
     );
     totalValue = round2(totalValue);
@@ -124,19 +157,23 @@ inventoryRouter.get(
 
     const wingSummaries = wings.map((w) => {
       const units = w.floors.flatMap((f) => f.units);
-      const sold = units.filter((u) => u.status === "sold" || u.status === "booked").length;
+      const sold = units.filter((u) => {
+        const st = statusOf(u);
+        return st === "sold" || st === "booked";
+      }).length;
       let wingSoldValue = 0;
       let wingReceived = 0;
       let wingRemaining = 0;
       for (const u of units) {
         const booking = bookingByUnit.get(u.id);
+        const st = statusOf(u);
         if (booking?.financials) {
           wingSoldValue += booking.financials.totalCost ?? 0;
           wingReceived += booking.payments
             .filter((p) => p.status !== "pending")
             .reduce((s, p) => s + p.amount, 0);
         }
-        if (u.status === "available" || u.status === "hold") {
+        if (st === "available" || st === "hold") {
           wingRemaining += unitListPrice(u);
         }
       }
@@ -144,11 +181,11 @@ inventoryRouter.get(
         id: w.id,
         name: w.name,
         total: units.length,
-        available: units.filter((u) => u.status === "available").length,
-        sold: units.filter((u) => u.status === "sold").length,
-        booked: units.filter((u) => u.status === "booked").length,
-        hold: units.filter((u) => u.status === "hold").length,
-        blocked: units.filter((u) => u.status === "blocked").length,
+        available: units.filter((u) => statusOf(u) === "available").length,
+        sold: units.filter((u) => statusOf(u) === "sold").length,
+        booked: units.filter((u) => statusOf(u) === "booked").length,
+        hold: units.filter((u) => statusOf(u) === "hold").length,
+        blocked: units.filter((u) => statusOf(u) === "blocked").length,
         pctSold: units.length ? Math.round((sold / units.length) * 100) : 0,
         soldValue: round2(wingSoldValue),
         received: round2(wingReceived),
@@ -197,7 +234,7 @@ inventoryRouter.get(
             return {
               id: u.id,
               unitNumber: u.unitNumber,
-              status: u.status,
+              status: effectiveUnitStatus(u.status, booking),
               unitType: u.unitType,
               configuration: u.configuration,
               photoUrl: u.photoUrl,

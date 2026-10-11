@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Download,
@@ -144,6 +144,7 @@ function SheetUploadCard({
   step: number;
   allowed: boolean;
 }) {
+  const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [busy, setBusy] = useState<"preview" | "import" | null>(null);
@@ -170,6 +171,15 @@ function SheetUploadCard({
         toast.success(
           `${kind.sheetName} imported · ${res.created} created · ${res.updated} updated`,
         );
+        // Refresh inventory / bookings / dashboards so status pills stay in sync
+        void qc.invalidateQueries({ queryKey: ["inventory"] });
+        void qc.invalidateQueries({ queryKey: ["units"] });
+        void qc.invalidateQueries({ queryKey: ["bookings"] });
+        void qc.invalidateQueries({ queryKey: ["projects"] });
+        void qc.invalidateQueries({ queryKey: ["payments-list"] });
+        void qc.invalidateQueries({ queryKey: ["customers"] });
+        void qc.invalidateQueries({ queryKey: ["dashboard"] });
+        void qc.invalidateQueries({ queryKey: qk.bulkImportKinds });
       }
     } catch (err) {
       fail(err, `${kind.sheetName} import failed`);
