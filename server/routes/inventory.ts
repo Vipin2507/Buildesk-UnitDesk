@@ -28,16 +28,7 @@ const UNIT_STATUSES = [
   "not_available",
 ] as const;
 
-/** Prefer booking-driven status; normalize casing from bulk uploads. */
-function effectiveUnitStatus(
-  unitStatus: string,
-  booking?: { status: string } | null,
-): string {
-  if (booking && booking.status !== "cancelled") {
-    if (booking.status === "hold") return "hold";
-    if (booking.status === "confirmed") return "sold";
-    if (booking.status === "booked") return "booked";
-  }
+function normalizeUnitStatus(unitStatus: string): string {
   const s = String(unitStatus ?? "available")
     .toLowerCase()
     .trim()
@@ -45,6 +36,37 @@ function effectiveUnitStatus(
   if (s === "notavailable") return "not_available";
   if ((UNIT_STATUSES as readonly string[]).includes(s)) return s;
   return "available";
+}
+
+/**
+ * Single source of truth for list + edit:
+ * - confirmed booking → sold
+ * - hold booking → hold
+ * - booked booking → booked, unless unit was already sold (don't downgrade)
+ * - no booking → normalized unit.status
+ */
+function effectiveUnitStatus(
+  unitStatus: string,
+  booking?: { status: string } | null,
+): string {
+  const u = normalizeUnitStatus(unitStatus);
+  if (booking && booking.status !== "cancelled") {
+    if (booking.status === "hold") return "hold";
+    if (booking.status === "confirmed") return "sold";
+    if (booking.status === "booked") return u === "sold" ? "sold" : "booked";
+  }
+  return u;
+}
+
+async function healUnitStatus(
+  unitId: string,
+  unitStatus: string,
+  booking?: { status: string } | null,
+) {
+  const next = effectiveUnitStatus(unitStatus, booking);
+  if (normalizeUnitStatus(unitStatus) === next) return next;
+  await prisma.unit.update({ where: { id: unitId }, data: { status: next } });
+  return next;
 }
 
 inventoryRouter.get(
@@ -338,6 +360,9 @@ inventoryRouter.get(
     });
 
     const listPrice = unitListPrice(unit);
+    const activeBooking = unit.bookings[0] ?? null;
+    const status = await healUnitStatus(unit.id, unit.status, activeBooking);
+
     const bookings = unit.bookings.map((b) => {
       const toCollect = collectableAmount(b.financials);
       const customerReceived = round2(
@@ -362,6 +387,7 @@ inventoryRouter.get(
 
     res.json({
       ...unit,
+      status,
       listPrice,
       bookings,
     });
@@ -403,27 +429,36 @@ inventoryRouter.patch(
       wingId: existing.floor.wingId,
       unitId: existing.id,
     });
-    const body = req.body as { status?: string };
-    if (body.status && ["hold", "blocked"].includes(body.status)) {
+    const body = { ...(req.body as Record<string, unknown>) };
+    if (body.status && ["hold", "blocked"].includes(String(body.status))) {
       requirePermission(user, "hold");
     }
-    if (body.status && existing.bookings.length && body.status === "available") {
-      throw new HttpError(409, "Unit has an active booking");
+    if (body.status && existing.bookings.length) {
+      const derived = effectiveUnitStatus(existing.status, existing.bookings[0]);
+      // Status is owned by the booking — keep list/edit in sync
+      if (String(body.status) === "available") {
+        throw new HttpError(409, "Unit has an active booking — cancel the booking first");
+      }
+      body.status = derived;
     }
     const updated = await prisma.unit.update({
       where: { id: existing.id },
-      data: req.body,
+      data: body,
     });
+    const status = effectiveUnitStatus(updated.status, existing.bookings[0] ?? null);
+    if (status !== updated.status) {
+      await prisma.unit.update({ where: { id: updated.id }, data: { status } });
+    }
     await audit({
       actorId: user.id,
       actorName: user.name,
-      action: body.status ? `unit.status.${body.status}` : "unit.update",
+      action: body.status ? `unit.status.${String(body.status)}` : "unit.update",
       entityType: "unit",
       entityId: existing.id,
       projectId: existing.floor.wing.projectId,
-      meta: req.body,
+      meta: body,
     });
-    res.json(updated);
+    res.json({ ...updated, status });
   }),
 );
 
