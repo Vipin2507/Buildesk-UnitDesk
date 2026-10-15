@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.ts";
 import { asyncHandler, listMeta, listResult } from "../lib/http.ts";
 import { accessibleProjectIds, assertProjectAccess } from "../lib/access.ts";
 import { round2 } from "../lib/commission.ts";
+import { unlockedBrokeragePct } from "../lib/project-mandate.ts";
 import { collectableAmount } from "../lib/schedule.ts";
 import { requireUser } from "../middleware/auth.ts";
 
@@ -157,7 +158,11 @@ customersRouter.get(
           booking: {
             include: {
               unit: true,
-              project: true,
+              project: {
+                include: {
+                  brokerageMilestones: { orderBy: { collectionPct: "asc" } },
+                },
+              },
               financials: true,
               payments: {
                 where: { appliesTo: "customer", status: { not: "pending" } },
@@ -175,6 +180,26 @@ customersRouter.get(
       const received = round2(c.booking.payments.reduce((s, p) => s + p.amount, 0));
       const outstanding = round2(Math.max(0, toCollect - received));
       const collectionPct = toCollect ? Math.round((received / toCollect) * 1000) / 10 : 0;
+      const remainingPct = toCollect
+        ? Math.round((outstanding / toCollect) * 1000) / 10
+        : 0;
+      const agreementValue = round2(
+        c.booking.financials?.agreement ?? c.booking.financials?.totalCost ?? 0,
+      );
+
+      const milestones = c.booking.project.brokerageMilestones ?? [];
+      const hasMandate =
+        milestones.length > 0 ||
+        (c.booking.project.agreedMandateBrokerage != null &&
+          c.booking.project.agreedMandateBrokerage > 0);
+      const unlockedPct = milestones.length
+        ? unlockedBrokeragePct(milestones, collectionPct)
+        : hasMandate
+          ? (c.booking.project.agreedMandateBrokerage ?? 0)
+          : 0;
+      const nextMilestone = milestones.find((m) => collectionPct + 0.05 < m.collectionPct) ?? null;
+      const mandateEligible = hasMandate && unlockedPct > 0;
+
       const { payments: _payments, ...bookingRest } = c.booking;
       return {
         ...c,
@@ -184,6 +209,17 @@ customersRouter.get(
           received,
           outstanding,
           collectionPct,
+          remainingPct,
+          agreementValue,
+          mandate: hasMandate
+            ? {
+                eligible: mandateEligible,
+                unlockedBrokeragePct: unlockedPct,
+                agreedMandateBrokerage: c.booking.project.agreedMandateBrokerage,
+                nextCollectionPct: nextMilestone?.collectionPct ?? null,
+                mandateTerm: c.booking.project.mandateTerm,
+              }
+            : null,
         },
       };
     });

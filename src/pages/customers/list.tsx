@@ -52,11 +52,25 @@ type Customer = {
     status: string;
     unit: { unitNumber: string };
     project: { id: string; name: string };
-    financials: { totalCost: number; valueToBeCollected?: number; finance?: number } | null;
+    financials: {
+      totalCost: number;
+      agreement?: number | null;
+      valueToBeCollected?: number;
+      finance?: number;
+    } | null;
     toCollect: number;
     received: number;
     outstanding: number;
     collectionPct: number;
+    remainingPct: number;
+    agreementValue: number;
+    mandate: {
+      eligible: boolean;
+      unlockedBrokeragePct: number;
+      agreedMandateBrokerage: number | null;
+      nextCollectionPct: number | null;
+      mandateTerm: string | null;
+    } | null;
   };
 };
 
@@ -86,6 +100,10 @@ const COLLECTED_PCT_OPTIONS = [
   { value: 75, label: "≥75%" },
   { value: 100, label: "Fully paid" },
 ] as const;
+
+function round1(n: number) {
+  return Math.round(n * 10) / 10;
+}
 
 function normalizeFlat(value: string) {
   return value.replace(/[\s_-]/g, "").toLowerCase();
@@ -665,6 +683,16 @@ export function CustomersPage() {
                 ),
               },
               {
+                key: "agreement",
+                header: "Agreement value",
+                hideOnMobile: true,
+                cell: (r) => (
+                  <span className="tabular-nums font-semibold">
+                    {inr(r.booking.agreementValue || r.booking.financials?.totalCost)}
+                  </span>
+                ),
+              },
+              {
                 key: "recv",
                 header: "Received",
                 hideOnMobile: true,
@@ -689,9 +717,71 @@ export function CustomersPage() {
               },
               {
                 key: "pct",
-                header: "Collected",
+                header: "% Collected",
                 hideOnMobile: true,
-                cell: (r) => <span className="tabular-nums font-medium">{r.booking.collectionPct}%</span>,
+                cell: (r) => (
+                  <span className="tabular-nums font-medium text-success">
+                    {r.booking.collectionPct}%
+                  </span>
+                ),
+              },
+              {
+                key: "rem",
+                header: "% Remaining",
+                hideOnMobile: true,
+                cell: (r) => (
+                  <span
+                    className={cn(
+                      "tabular-nums font-medium",
+                      (r.booking.remainingPct ?? Math.max(0, round1(100 - r.booking.collectionPct))) >
+                        0
+                        ? "text-warning"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {r.booking.remainingPct ?? round1(100 - r.booking.collectionPct)}%
+                  </span>
+                ),
+              },
+              {
+                key: "mandate",
+                header: "Mandate",
+                hideOnMobile: true,
+                cell: (r) => {
+                  const m = r.booking.mandate;
+                  if (!m) {
+                    return <span className="text-[11px] text-muted-foreground">—</span>;
+                  }
+                  if (m.eligible) {
+                    return (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-success/25 bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success"
+                        title={
+                          m.unlockedBrokeragePct
+                            ? `Unlocked ${m.unlockedBrokeragePct}% brokerage — apply for mandate`
+                            : "Apply for mandate"
+                        }
+                      >
+                        <span className="h-[5px] w-[5px] rounded-full bg-success" />
+                        Eligible for mandate
+                      </span>
+                    );
+                  }
+                  return (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                      title={
+                        m.nextCollectionPct != null
+                          ? `Unlocks at ${m.nextCollectionPct}% collection`
+                          : (m.mandateTerm ?? "Mandate pending")
+                      }
+                    >
+                      {m.nextCollectionPct != null
+                        ? `Pending · need ${m.nextCollectionPct}%`
+                        : "Pending"}
+                    </span>
+                  );
+                },
               },
               {
                 key: "status",
